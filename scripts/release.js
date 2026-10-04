@@ -62,6 +62,7 @@ try {
 sh('git add package.json package-lock.json');
 if (out('git status --porcelain')) sh(`git commit -m "Release v${version}"`);
 sh(`git tag v${version}`);
-sh('git push --follow-tags');
+sh('git push');
+sh(`git push origin v${version}`); // a plain tag isn't sent by --follow-tags
 console.log(`\n✔ v${version} is live. Installed apps will update the next time they're restarted.\n`);
 })();
