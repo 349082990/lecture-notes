@@ -126,7 +126,7 @@ function createWindow() {
     fullscreenable: false,
     show: false,
     alwaysOnTop: settings.alwaysOnTop,
-    skipTaskbar: false,
+    skipTaskbar: settings.mode === 'immersive',   // the overlay stays out of the taskbar (tray icon still has it)
     title: 'Lecture Notes',
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: {
@@ -177,6 +177,11 @@ function applyAlwaysOnTop() {
   else win.setAlwaysOnTop(false);
 }
 
+// Immersive mode keeps the app off the taskbar; the editor has a normal taskbar button.
+function applyTaskbar() {
+  if (win && !win.isDestroyed()) win.setSkipTaskbar(TEST_HIDDEN || settings.mode === 'immersive');
+}
+
 function toggleVisible() {
   if (!win) return;
   if (win.isVisible() && !win.isMinimized()) {
@@ -194,15 +199,16 @@ function showWindow() {
   win.show(); win.focus(); applyAlwaysOnTop();
 }
 
-// Full screen is done by hand (the window is frameless + transparent, so the native kind isn't available):
-// cover the whole display, and put the old bounds back afterwards.
+// "Full screen" maximizes the window: it fills the screen's work area, so the taskbar stays visible.
+// Done by hand (the window is frameless + transparent, so native maximize isn't reliable), and the
+// old bounds go back afterwards.
 function setFullscreen(on) {
   if (!win || win.isDestroyed()) return;
   on = !!on && settings.mode === 'editor';
   if (on === !!fullBounds) return;
   if (on) {
     fullBounds = win.getBounds();
-    const d = TEST_HIDDEN ? screen.getPrimaryDisplay().bounds : screen.getDisplayMatching(fullBounds).bounds;
+    const d = TEST_HIDDEN ? screen.getPrimaryDisplay().workArea : screen.getDisplayMatching(fullBounds).workArea;
     win.setBounds({ ...d, x: d.x + TEST_OFFSET });
     if (!win.isVisible() && !TEST_HIDDEN) win.show();
     win.focus();
@@ -290,6 +296,7 @@ function setMode(mode) {
   win.setBounds(boundsFor(mode));
   saveSettings();
   win.webContents.send('mode', mode);
+  applyTaskbar();
   refreshTrayMenu();
   updateWheelHook();
   if (SHORTCUTS_ON) setTimeout(() => setOverlayShortcuts(settings.mode === 'immersive'), 0);
