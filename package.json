@@ -1,0 +1,68 @@
+{
+  "name": "lecture-notes",
+  "version": "1.1.0",
+  "description": "Lecture Notes",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --publish never",
+    "release": "node scripts/release.js"
+  },
+  "author": "Lecture Notes",
+  "dependencies": {
+    "html-to-docx": "^1.8.0",
+    "mammoth": "^1.13.0",
+    "electron-updater": "^6.6.2"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^26.15.3"
+  },
+  "productName": "Lecture Notes",
+  "build": {
+    "appId": "com.lecturenotes.app",
+    "productName": "Lecture Notes",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "build/icon.png",
+      "build/tray.png",
+      "build/tray@2x.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "Lecture Notes",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "artifactName": "Lecture-Notes-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "GITHUB_USER",
+        "repo": "lecture-notes-releases",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

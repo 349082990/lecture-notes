@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https: http: file:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:">
+<title>Lecture Notes</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="mode-editor">
+
+<!-- ================= EDITOR MODE ================= -->
+<div id="app">
+  <header id="titlebar">
+    <button class="icon-btn" id="btn-sidebar" title="Documents (Ctrl+O)" data-icon="menu"></button>
+    <span class="doc-icon" data-icon="doc"></span>
+    <div class="title-wrap">
+      <input id="doc-title" spellcheck="false" value="Untitled document" title="Rename">
+      <span id="save-state">Saved</span>
+    </div>
+    <div class="drag-space"></div>
+    <button class="pill-btn update-pill" id="btn-update" title="An update is ready — click to restart and install it" hidden><span data-icon="download"></span><span>Restart to update</span></button>
+    <button class="pill-btn" id="btn-immersive" title="Immersive mode (Ctrl+Alt+I)"><span data-icon="book"></span><span>Immersive</span></button>
+    <button class="icon-btn" id="btn-fullscreen" title="Full screen (F11)" data-icon="fullscreen"></button>
+    <button class="icon-btn" id="btn-settings" title="Settings (Ctrl+,)" data-icon="sliders"></button>
+    <button class="icon-btn" id="btn-hide" title="Hide (Ctrl+])" data-icon="minus"></button>
+  </header>
+
+  <nav id="menubar">
+    <button data-menu="file">File</button>
+    <button data-menu="edit">Edit</button>
+    <button data-menu="view">View</button>
+    <button data-menu="insert">Insert</button>
+    <button data-menu="format">Format</button>
+    <button data-menu="tools">Tools</button>
+  </nav>
+
+  <div id="toolbar">
+    <button class="tb" data-cmd="undo" title="Undo (Ctrl+Z)" data-icon="undo"></button>
+    <button class="tb" data-cmd="redo" title="Redo (Ctrl+Y)" data-icon="redo"></button>
+    <button class="tb" data-cmd="print" title="Print (Ctrl+P)" data-icon="print"></button>
+    <button class="tb" data-cmd="spell" title="Spell check" data-icon="spell"></button>
+    <span class="sep"></span>
+    <select id="zoom" title="Zoom">
+      <option value="fit">Fit</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="0.9">90%</option>
+      <option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option>
+    </select>
+    <span class="sep"></span>
+    <select id="block-style" title="Styles">
+      <option value="p">Normal text</option><option value="title">Title</option><option value="subtitle">Subtitle</option>
+      <option value="h1">Heading 1</option><option value="h2">Heading 2</option><option value="h3">Heading 3</option><option value="h4">Heading 4</option>
+    </select>
+    <span class="sep"></span>
+    <select id="font-family" title="Font"></select>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="fontDown" title="Decrease font size (Ctrl+Shift+,)" data-icon="minus"></button>
+    <input id="font-size" title="Font size" value="8" inputmode="decimal">
+    <button class="tb" data-cmd="fontUp" title="Increase font size (Ctrl+Shift+.)" data-icon="plus"></button>
+    <span class="sep"></span>
+    <button class="tb txt" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+    <button class="tb txt" data-cmd="italic" title="Italic (Ctrl+I)"><i style="font-family:Georgia,serif">I</i></button>
+    <button class="tb txt" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+    <button class="tb txt" data-cmd="strikeThrough" title="Strikethrough (Alt+Shift+5)"><s>S</s></button>
+    <button class="tb color-btn" data-cmd="foreColor" title="Text color"><span class="glyph">A</span><span class="bar" id="fore-bar"></span></button>
+    <button class="tb color-btn" data-cmd="hiliteColor" title="Highlight color"><span data-icon="highlight"></span><span class="bar" id="hilite-bar"></span></button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="link" title="Insert link (Ctrl+K)" data-icon="link"></button>
+    <button class="tb" data-cmd="image" title="Insert image" data-icon="image"></button>
+    <button class="tb" data-cmd="table" title="Insert table" data-icon="table"></button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="justifyLeft" title="Left align (Ctrl+Shift+L)" data-icon="alignLeft"></button>
+    <button class="tb" data-cmd="justifyCenter" title="Center align (Ctrl+Shift+E)" data-icon="alignCenter"></button>
+    <button class="tb" data-cmd="justifyRight" title="Right align (Ctrl+Shift+R)" data-icon="alignRight"></button>
+    <button class="tb" data-cmd="justifyFull" title="Justify (Ctrl+Shift+J)" data-icon="alignJustify"></button>
+    <button class="tb" data-cmd="lineSpacing" title="Line &amp; paragraph spacing" data-icon="spacing"></button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="checklist" title="Checklist (Ctrl+Shift+9)" data-icon="checklist"></button>
+    <button class="tb" data-cmd="insertUnorderedList" title="Bulleted list (Ctrl+Shift+8)" data-icon="bullets"></button>
+    <button class="tb" data-cmd="insertOrderedList" title="Numbered list (Ctrl+Shift+7)" data-icon="numbers"></button>
+    <button class="tb" data-cmd="outdent" title="Decrease indent (Shift+Tab in lists)" data-icon="outdent"></button>
+    <button class="tb" data-cmd="indent" title="Increase indent (Tab in lists)" data-icon="indent"></button>
+    <button class="tb" data-cmd="clearFormat" title="Clear formatting (Ctrl+\)" data-icon="clear"></button>
+  </div>
+
+  <div id="findbar" hidden>
+    <input id="find-input" placeholder="Find in document">
+    <span id="find-count"></span>
+    <button class="icon-btn sm" id="find-prev" title="Previous (Shift+Enter)" data-icon="up"></button>
+    <button class="icon-btn sm" id="find-next" title="Next (Enter)" data-icon="down"></button>
+    <label class="chk"><input type="checkbox" id="find-case"> Match case</label>
+    <input id="replace-input" placeholder="Replace with">
+    <button class="text-btn" id="replace-one">Replace</button>
+    <button class="text-btn" id="replace-all">Replace all</button>
+    <button class="icon-btn sm" id="find-close" title="Close (Esc)" data-icon="x"></button>
+  </div>
+
+  <div id="main">
+    <aside id="sidebar">
+      <div class="sb-head">
+        <span class="sb-title">Documents</span>
+        <button class="icon-btn sm" id="sb-new-doc" title="New document (Ctrl+N)" data-icon="filePlus"></button>
+        <button class="icon-btn sm" id="sb-new-folder" title="New folder" data-icon="folderPlus"></button>
+        <button class="icon-btn sm" id="sb-open-folder" title="Show in File Explorer" data-icon="external"></button>
+      </div>
+      <div class="sb-search"><span data-icon="search"></span><input id="sb-filter" placeholder="Search documents"></div>
+      <div id="tree" class="tree"></div>
+      <div class="sb-foot" id="sb-root" title="Documents folder"></div>
+    </aside>
+    <div id="canvas">
+      <div id="page-wrap">
+        <div id="page" contenteditable="true" spellcheck="true"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer id="statusbar">
+    <span id="word-count">0 words</span>
+    <span class="grow"></span>
+    <span id="hint">Ctrl+] hide · Ctrl+Alt+I immersive</span>
+  </footer>
+</div>
+
+<!-- ================= IMMERSIVE MODE ================= -->
+<div id="imm">
+  <div id="imm-viewport"><div id="imm-track"><div id="imm-content"></div></div></div>
+  <div id="imm-empty" hidden>This document is empty — press Ctrl+Alt+I to edit it.</div>
+  <div id="imm-controls">
+    <span id="imm-pos"></span>
+    <button id="imm-lines" title="Lines per view"></button>
+    <button id="imm-smaller" title="Smaller text (Ctrl+scroll)">A−</button>
+    <button id="imm-bigger" title="Larger text (Ctrl+scroll)">A+</button>
+    <button id="imm-exit" title="Back to editor (Ctrl+Alt+I)" data-icon="shrink"></button>
+    <button id="imm-hide" title="Hide (Ctrl+])" data-icon="minus"></button>
+  </div>
+</div>
+
+<!-- resize handles -->
+<div class="rz" data-edge="n"></div><div class="rz" data-edge="s"></div>
+<div class="rz" data-edge="e"></div><div class="rz" data-edge="w"></div>
+<div class="rz" data-edge="ne"></div><div class="rz" data-edge="nw"></div>
+<div class="rz" data-edge="se"></div><div class="rz" data-edge="sw"></div>
+
+<!-- ================= POPOVERS & DIALOGS ================= -->
+<div id="popover" class="popover" hidden></div>
+
+<div id="link-bubble" class="bubble" hidden>
+  <a id="lb-url" href="#"></a>
+  <button class="icon-btn sm" id="lb-edit" title="Edit link" data-icon="pencil"></button>
+  <button class="icon-btn sm" id="lb-remove" title="Remove link" data-icon="unlink"></button>
+</div>
+
+<div id="img-bubble" class="bubble" hidden>
+  <button data-img="25">25%</button><button data-img="50">50%</button><button data-img="75">75%</button><button data-img="100">100%</button>
+  <span class="sep"></span>
+  <button data-imgalign="inline" title="In line with text">Inline</button>
+  <button data-imgalign="left" title="Left" data-icon="alignLeft"></button>
+  <button data-imgalign="center" title="Center" data-icon="alignCenter"></button>
+  <button data-imgalign="right" title="Right" data-icon="alignRight"></button>
+  <span class="sep"></span>
+  <button data-img="delete" title="Delete image" data-icon="trash"></button>
+</div>
+<div id="img-handle" hidden></div>
+
+<div id="modal-back" hidden>
+  <div class="modal" id="dlg-link" hidden>
+    <h2>Link</h2>
+    <label>Text<input id="link-text"></label>
+    <label>Link<input id="link-url" placeholder="Paste a link"></label>
+    <div class="modal-actions"><button class="text-btn" data-close>Cancel</button><button class="primary-btn" id="link-apply">Apply</button></div>
+  </div>
+
+  <div class="modal" id="dlg-words" hidden>
+    <h2>Word count</h2>
+    <table class="stats" id="word-stats"></table>
+    <div class="modal-actions"><button class="primary-btn" data-close>OK</button></div>
+  </div>
+
+  <div class="modal" id="dlg-prompt" hidden>
+    <h2 id="prompt-title">Name</h2>
+    <input id="prompt-input">
+    <div class="modal-actions"><button class="text-btn" data-close>Cancel</button><button class="primary-btn" id="prompt-ok">OK</button></div>
+  </div>
+
+  <div class="modal wide" id="dlg-settings" hidden>
+    <div class="settings-head"><h2>Settings</h2><button class="icon-btn" data-close data-icon="x" title="Close"></button></div>
+    <div class="settings-body">
+      <section>
+        <h3>Appearance</h3>
+        <div class="row"><span>Theme</span><div class="seg" data-setting="theme"><button data-v="system">System</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+        <div class="row"><span>Dark theme style</span><div class="seg" data-setting="darkStyle"><button data-v="black">Pure black</button><button data-v="gray">Dark gray</button></div></div>
+        <div class="row"><span>Editor page in dark mode</span><div class="seg" data-setting="editorPage"><button data-v="paper">White paper</button><button data-v="match">Dark page</button></div></div>
+      </section>
+      <section>
+        <h3>Overlay</h3>
+        <div class="row"><span>Overlay opacity <em id="v-overlayOpacity"></em></span><input type="range" min="15" max="100" data-setting="overlayOpacity" data-scale="100"></div>
+        <div class="row"><span>Background opacity <em id="v-backgroundOpacity"></em></span><input type="range" min="0" max="100" data-setting="backgroundOpacity" data-scale="100"></div>
+        <div class="row"><span>Always on top</span><label class="switch"><input type="checkbox" data-setting="alwaysOnTop"><i></i></label></div>
+        <div class="row"><span>Start with Windows</span><label class="switch"><input type="checkbox" data-setting="launchAtStartup"><i></i></label></div>
+      </section>
+      <section>
+        <h3>Immersive mode</h3>
+        <div class="row"><span>Lines shown at a time</span><div class="seg" data-setting="linesPerView" data-num><button data-v="1">1 line</button><button data-v="2">2 lines</button><button data-v="25">Default (25 max)</button></div></div>
+        <div class="row"><span>Margins</span><div class="seg" data-setting="immersiveMargins"><button data-v="none">None</button><button data-v="narrow">Narrow</button><button data-v="normal">Normal</button><button data-v="wide">Wide</button></div></div>
+        <div class="row"><span>Text size <em id="v-immersiveZoom"></em></span><input type="range" min="50" max="300" step="10" data-setting="immersiveZoom" data-scale="100"></div>
+      </section>
+      <section>
+        <h3>Editor</h3>
+        <div class="row"><span>Page margins</span><div class="seg" data-setting="editorMargins"><button data-v="narrow">Narrow</button><button data-v="normal">Normal</button><button data-v="wide">Wide</button></div></div>
+        <div class="row"><span>Default font</span><select data-setting="defaultFont" id="set-font"></select></div>
+        <div class="row"><span>Default size</span><select data-setting="defaultFontSize" data-num id="set-size"></select></div>
+        <div class="row"><span>Default line spacing</span><select data-setting="defaultLineSpacing" data-num><option value="1">Single</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">Double</option></select></div>
+      </section>
+      <section>
+        <h3>Keyboard shortcuts <small>(work from any app)</small></h3>
+        <div class="row"><span>Show / hide overlay</span><div class="sc-wrap"><input class="shortcut" data-setting="toggleShortcut" readonly><small class="sc-err" data-err="toggleShortcut"></small></div></div>
+        <div class="row"><span>Toggle immersive mode</span><div class="sc-wrap"><input class="shortcut" data-setting="immersiveShortcut" readonly><small class="sc-err" data-err="immersiveShortcut"></small></div></div>
+        <div class="row"><span></span><button class="text-btn" id="sc-reset">Reset to defaults</button></div>
+      </section>
+      <section>
+        <h3>Storage</h3>
+        <div class="row"><span>Documents folder</span><div class="folder-row"><code id="set-folder"></code><button class="text-btn" id="set-folder-change">Change…</button><button class="text-btn" id="set-folder-open">Open</button></div></div>
+      </section>
+      <section>
+        <h3>Updates</h3>
+        <div class="row"><span id="set-update-status">Updates install automatically when you restart the app.</span><button class="text-btn" id="set-update">Check for updates</button></div>
+      </section>
+      <section class="about">
+        <span id="set-version"></span>
+        <button class="text-btn danger" id="set-quit">Quit Lecture Notes</button>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="icons.js"></script>
+<script src="paste.js"></script>
+<script src="immersive.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
