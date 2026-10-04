@@ -24,7 +24,11 @@ if (!pub.owner || pub.owner === 'GITHUB_USER') fail('Set build.publish[0].owner 
 
 let token = process.env.GH_TOKEN;
 if (!token) {
-  try { token = out('gh auth token'); } catch { fail('Sign in with `gh auth login` (or set GH_TOKEN) so the installer can be uploaded.'); }
+  const portableGh = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'gh', 'bin', 'gh.exe');
+  for (const gh of ['gh', `"${portableGh}"`]) {
+    try { token = out(`${gh} auth token`); break; } catch {}
+  }
+  if (!token) fail('Sign in with `gh auth login` (or set GH_TOKEN) so the installer can be uploaded.');
 }
 
 const bump = process.argv[2] || 'patch';
