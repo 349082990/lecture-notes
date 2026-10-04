@@ -36,23 +36,35 @@ sh(`npm version ${bump} --no-git-tag-version --allow-same-version`, { stdio: 'pi
 const version = pkg().version;
 console.log(`\nReleasing Lecture Notes v${version} to github.com/${pub.owner}/${pub.repo}\n`);
 
-// electron-builder creates the GitHub release from two parallel uploads (installer + blockmap)
-// that race each other and fail with HTTP 422, so create the release up front.
-async function ensureRelease(tag) {
-  const api = `https://api.github.com/repos/${pub.owner}/${pub.repo}/releases`;
-  const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
-  if ((await fetch(`${api}/tags/${tag}`, { headers })).ok) return;
-  const r = await fetch(api, {
-    method: 'POST', headers,
-    body: JSON.stringify({ tag_name: tag, name: tag.slice(1), body: `Lecture Notes ${tag.slice(1)}` })
-  });
-  if (!r.ok) throw new Error(`Couldn't create release ${tag}: ${r.status} ${await r.text()}`);
+// The release is created as a DRAFT first and only made public once every file (installer,
+// blockmap, latest.yml) is uploaded. Installed apps can't see drafts, so they never catch a
+// half-uploaded release ("Cannot find latest.yml"). Creating it up front also stops
+// electron-builder's two parallel uploads from racing to create it (HTTP 422).
+const api = `https://api.github.com/repos/${pub.owner}/${pub.repo}/releases`;
+const gh = async (url, opts = {}) => {
+  const r = await fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
+  if (!r.ok) throw new Error(`GitHub ${opts.method || 'GET'} ${url}: ${r.status} ${await r.text()}`);
+  return r.json();
+};
+async function draftRelease(tag) {
+  const existing = (await gh(`${api}?per_page=30`)).find(r => r.tag_name === tag);
+  if (existing) {
+    if (!existing.draft) throw new Error(`${tag} is already published — pick a new version`);
+    return existing;
+  }
+  return gh(api, { method: 'POST', body: JSON.stringify({ tag_name: tag, name: tag.slice(1), body: `Lecture Notes ${tag.slice(1)}`, draft: true }) });
+}
+async function publishRelease(release) {
+  const assets = (await gh(`${api}/${release.id}/assets`)).map(a => a.name);
+  if (!assets.includes('latest.yml')) throw new Error(`latest.yml didn't upload (got: ${assets.join(', ')})`);
+  await gh(`${api}/${release.id}`, { method: 'PATCH', body: JSON.stringify({ draft: false, make_latest: 'true' }) });
 }
 
 (async () => {
 try {
-  await ensureRelease(`v${version}`);
+  const release = await draftRelease(`v${version}`);
   sh('npx electron-builder --win --publish always', { env: { ...process.env, GH_TOKEN: token } });
+  await publishRelease(release);
 } catch (e) {
   if (e && e.message && !e.status) console.error(e.message);
   sh('git checkout -- package.json package-lock.json');

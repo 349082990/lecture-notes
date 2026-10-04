@@ -340,28 +340,42 @@ function sendUpdate(status) {
   if (win && !win.isDestroyed()) win.webContents.send('update-status', status);
   refreshTrayMenu();
 }
-const shortErr = (e) => String((e && e.message) || e).split('\n')[0].slice(0, 140);
+// Turn electron-updater's raw errors into something readable.
+function shortErr(e) {
+  const m = String((e && e.message) || e);
+  if (/latest\.yml|404|Cannot find/i.test(m)) return 'the newest version is still being published';
+  if (/ERR_INTERNET_DISCONNECTED|ENOTFOUND|ERR_NAME_NOT_RESOLVED|ETIMEDOUT|ECONNRESET|ERR_NETWORK/i.test(m)) return "you're offline or GitHub can't be reached";
+  return m.split('\n')[0].slice(0, 140);
+}
+// A failed check tries again after 2 minutes (up to 5 times) instead of waiting for the 4-hour check.
+let retryTimer = null, retries = 0;
+function updateFailed(e) {
+  if (updateStatus.state === 'ready') return;
+  const retrying = retries < 5;
+  sendUpdate({ state: 'error', message: shortErr(e) + (retrying ? ' — trying again in 2 minutes' : '') });
+  if (retrying && !retryTimer) retryTimer = setTimeout(() => { retryTimer = null; retries++; checkForUpdates(); }, 2 * 60 * 1000);
+}
 function setupUpdater() {
   if (!app.isPackaged) return;
   try { updater = require('electron-updater').autoUpdater; } catch (e) { console.error('updater unavailable', e); return; }
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = true;
   updater.on('checking-for-update', () => sendUpdate({ state: 'checking' }));
-  updater.on('update-not-available', () => sendUpdate({ state: 'none' }));
+  updater.on('update-not-available', () => { retries = 0; sendUpdate({ state: 'none' }); });
   updater.on('update-available', (i) => sendUpdate({ state: 'downloading', version: i.version, percent: 0 }));
   updater.on('download-progress', (p) => sendUpdate({ state: 'downloading', version: updateStatus.version, percent: p.percent }));
   updater.on('update-downloaded', (i) => sendUpdate({
     state: 'ready', version: i.version,
     auto: Date.now() - launchedAt < 60000 && settings.lastAutoUpdate !== i.version
   }));
-  updater.on('error', (e) => { if (updateStatus.state !== 'ready') sendUpdate({ state: 'error', message: shortErr(e) }); });
+  updater.on('error', updateFailed);
   setTimeout(checkForUpdates, 3000);
   setInterval(checkForUpdates, 4 * 60 * 60 * 1000);
 }
 async function checkForUpdates() {
   if (!updater) return updateStatus;
   if (['checking', 'downloading', 'ready', 'installing'].includes(updateStatus.state)) return updateStatus;
-  try { await updater.checkForUpdates(); } catch (e) { sendUpdate({ state: 'error', message: shortErr(e) }); }
+  try { await updater.checkForUpdates(); } catch (e) { updateFailed(e); }
   return updateStatus;
 }
 function installUpdate() {
