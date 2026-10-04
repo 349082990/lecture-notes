@@ -12,6 +12,12 @@
   /* ---------------- helpers ---------------- */
   let toastTimer;
   function toast(msg, ms = 2600) {
+    // The overlay window is only as tall as its text, so a popup inside it is cut off —
+    // the main process shows it in its own little window next to the overlay instead.
+    if (document.body.classList.contains("mode-immersive")) {
+      $("#toast").hidden = true;
+      return void api.call("toast:show", msg, ms).catch(() => {});
+    }
     const t = $("#toast");
     t.textContent = msg;
     t.hidden = false;

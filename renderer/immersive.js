@@ -12,6 +12,7 @@ window.Immersive = (function () {
   let lines = [];          // [{t, b, img}] in px relative to content top (visual, after zoom)
   let chunks = null;       // for 1/2-line modes: [{s, e}] line ranges; null = sliding window
   let start = 0;           // index of first visible line
+  let pinned = false;      // after a heading jump: keep that heading on the first line, even at the end
   let opts = { lines: 25, zoom: 1, step: 3, flatHeadings: true };
   let heads = [];          // line index where each heading starts (for heading jumps)
   let lastHtml = '';
@@ -69,6 +70,7 @@ window.Immersive = (function () {
       if (!img.complete) img.addEventListener('load', () => queueMeasure(), { once: true });
     });
     start = Math.max(0, startLine | 0);
+    pinned = false;
     lastWidth = 0;
     measureAndRender(false);
   }
@@ -145,7 +147,9 @@ window.Immersive = (function () {
     if (N >= 3) { chunks = null; return; }
     chunks = [];
     let cur = null;
+    const headSet = new Set(heads);
     lines.forEach((L, i) => {
+      if (headSet.has(i) && cur) { chunks.push(cur); cur = null; }   // a heading always starts a view
       if (L.img) { if (cur) chunks.push(cur); cur = null; chunks.push({ s: i, e: i }); return; }
       if (!cur) cur = { s: i, e: i }; else cur.e = i;
       if (cur.e - cur.s + 1 >= N) { chunks.push(cur); cur = null; }
@@ -181,8 +185,9 @@ window.Immersive = (function () {
       return;
     }
     empty.hidden = true;
-    // In sliding mode keep the window full near the end of the document.
-    if (!chunks) {
+    // In sliding mode keep the window full near the end of the document
+    // (not after a heading jump — that heading stays on the first line).
+    if (!chunks && !pinned) {
       let s = Math.min(start, lines.length - 1);
       const e = Math.min(lines.length - 1, s + opts.lines - 1);
       if (e === lines.length - 1) {
@@ -201,7 +206,13 @@ window.Immersive = (function () {
     if (next && next.img) bottom = Math.min(bottom, Math.floor(next.t) - 1);
     else if (next && next.t < bottom && !lines[r.e].img) bottom = (next.t + bottom) / 2;
     if (bottom <= top) bottom = top + 1;
-    const h = Math.max(1, bottom - top);
+    let h = Math.max(1, bottom - top);
+    // Pinned with fewer lines left than the view holds: keep the box as tall as a full view
+    // at the end of the document would be, and leave the rest blank.
+    if (pinned && !chunks && r.e - r.s + 1 < opts.lines && r.e === lines.length - 1) {
+      const full = lines[r.e].b - lines[Math.max(0, r.e - opts.lines + 1)].t;
+      h = Math.max(h, Math.min(maxH, full));
+    }
     vp.style.height = h + 'px';
     track.style.transform = `translateY(${-top}px)`;
     fitHeight(Math.ceil(h + padY * 2 + border));
@@ -237,6 +248,12 @@ window.Immersive = (function () {
 
   function go(dir, big) {
     if (!lines.length) return;
+    if (pinned && dir > 0 && !chunks) {
+      const r = range();
+      if (r && r.e >= lines.length - 1) return;   // already showing the end — don't slide back up
+    }
+    const wasPinned = pinned;
+    pinned = false;
     if (chunks) {
       const ci = Math.max(0, Math.min(chunks.length - 1, chunkIndexFor(start) + dir));
       start = chunks[ci].s;
@@ -250,6 +267,8 @@ window.Immersive = (function () {
         const r = range();
         if (r && r.e >= lines.length - 1) start = Math.min(start, r.s);
       }
+      // scrolling up from a pinned heading moves one step, not straight back to a full view
+      if (wasPinned && dir < 0) { pinned = true; const r = range(); pinned = !!r && r.e - r.s + 1 < opts.lines; }
     }
     render();
   }
@@ -260,6 +279,7 @@ window.Immersive = (function () {
     const target = dir > 0 ? heads.find(h => h > cur) : [...heads].reverse().find(h => h < cur);
     if (target === undefined) return false;
     start = target;
+    pinned = true;
     render();
     return true;
   }
@@ -270,8 +290,8 @@ window.Immersive = (function () {
     active = true;
     load(html, startLine);
   }
-  function home() { start = 0; render(); }
-  function end() { start = lines.length - 1; if (chunks) start = chunks[chunks.length - 1].s; render(); }
+  function home() { start = 0; pinned = false; render(); }
+  function end() { start = lines.length - 1; pinned = false; if (chunks) start = chunks[chunks.length - 1].s; render(); }
 
   card.addEventListener('wheel', (e) => {
     if (!active) return;

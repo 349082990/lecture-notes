@@ -27,7 +27,7 @@ const DEFAULTS = {
   opacityShortcut: 'CommandOrControl+Alt+O', // overlay opacity 100 → 75 → 50 → 25%
   headingPrevShortcut: 'CommandOrControl+Alt+Up',   // global only while the overlay shows
   headingNextShortcut: 'CommandOrControl+Alt+Down',
-  recenterShortcut: 'CommandOrControl+Alt+0',       // overlay back to top-middle; global only while the overlay shows
+  recenterShortcut: 'CommandOrControl+Alt+0',       // overlay back to the top of the screen, centred; global only while the overlay shows
   immersiveHeadings: 'flat',             // flat (same size as text) | original
   anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
   docsFolder: path.join(app.getPath('documents'), 'Lecture Notes'),
@@ -176,6 +176,7 @@ function applyAlwaysOnTop() {
 function toggleVisible() {
   if (!win) return;
   if (win.isVisible() && !win.isMinimized()) {
+    hideToast();
     win.hide();
   } else {
     if (win.isMinimized()) win.restore();
@@ -209,22 +210,70 @@ function setFullscreen(on) {
   win.webContents.send('fullscreen', on);
 }
 
-// Put the overlay back at the top middle of its screen, keeping its width.
+// Put the overlay back at the very top of its screen, centred, keeping its width.
 function recenterOverlay() {
   if (!win || win.isDestroyed() || settings.mode !== 'immersive') return;
   const b = win.getBounds();
   const real = { ...b, x: b.x - TEST_OFFSET };
   const wa = (onScreen(real) ? screen.getDisplayMatching(real) : screen.getPrimaryDisplay()).workArea;
   const width = Math.min(b.width, wa.width);
-  win.setBounds({ x: wa.x + Math.round((wa.width - width) / 2) + TEST_OFFSET, y: wa.y + 24, width, height: b.height });
+  win.setBounds({ x: wa.x + Math.round((wa.width - width) / 2) + TEST_OFFSET, y: wa.y, width, height: b.height });
   settings.immersiveBounds = win.getBounds();
   saveSettings();
   if (!win.isVisible() && !TEST_HIDDEN) win.showInactive();
 }
 
+// Messages shown while the overlay is up ("Showing 2 lines at a time", …). The overlay window is
+// only as tall as its text, so a popup inside it gets cut off — these go in their own small,
+// click-through window just below the overlay (above it if there's no room below).
+const TOAST_W = 520, TOAST_H = 52;
+let toastWin = null, toastReady = null, toastTimer = null;
+const TOAST_HTML = `<!doctype html><meta charset="utf-8"><style>
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+  body{display:flex;align-items:center;justify-content:center;font:12.5px 'Segoe UI',system-ui,sans-serif}
+  #t{background:#323232;color:#fff;padding:9px 16px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.35);
+     max-width:${TOAST_W - 24}px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style><div id="t"></div>`;
+function ensureToastWin() {
+  if (toastWin && !toastWin.isDestroyed()) return;
+  toastWin = new BrowserWindow({
+    parent: win, width: TOAST_W, height: TOAST_H, show: false, frame: false, transparent: true, resizable: false,
+    movable: false, minimizable: false, maximizable: false, focusable: false, skipTaskbar: true,
+    hasShadow: false, alwaysOnTop: true, webPreferences: { contextIsolation: true, sandbox: true }
+  });
+  toastWin.setIgnoreMouseEvents(true);
+  toastWin.setAlwaysOnTop(true, 'screen-saver');
+  toastReady = toastWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(TOAST_HTML)).catch(() => {});
+  toastWin.on('closed', () => { toastWin = null; });
+}
+async function showToast(msg, ms = 2600) {
+  if (!win || win.isDestroyed()) return;
+  ensureToastWin();
+  await toastReady;
+  if (!toastWin || toastWin.isDestroyed()) return;
+  await toastWin.webContents.executeJavaScript(`document.getElementById('t').textContent = ${JSON.stringify(String(msg))}`).catch(() => {});
+  const b = win.getBounds();
+  const real = { ...b, x: b.x - TEST_OFFSET };
+  const wa = (onScreen(real) ? screen.getDisplayMatching(real) : screen.getPrimaryDisplay()).workArea;
+  const x = Math.round(Math.min(Math.max(real.x + (real.width - TOAST_W) / 2, wa.x), wa.x + wa.width - TOAST_W));
+  let y = real.y + real.height + 4;                                                  // below the overlay
+  if (y + TOAST_H > wa.y + wa.height) y = real.y - TOAST_H - 4;                      // no room: above it
+  if (y < wa.y) y = Math.min(real.y + real.height, wa.y + wa.height) - TOAST_H - 8;  // overlay fills the screen: inside its bottom edge
+  toastWin.setBounds({ x: x + TEST_OFFSET, y: Math.round(y), width: TOAST_W, height: TOAST_H });
+  toastWin.showInactive();
+  toastWin.moveTop();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, ms);
+}
+function hideToast() {
+  clearTimeout(toastTimer);
+  if (toastWin && !toastWin.isDestroyed()) toastWin.hide();
+}
+
 function setMode(mode) {
   if (!win || (mode !== 'editor' && mode !== 'immersive')) return;
   if (fullBounds) setFullscreen(false);
+  hideToast();
   const prev = settings.mode;
   if (prev === mode) { win.webContents.send('mode', mode); return; }
   settings[prev === 'immersive' ? 'immersiveBounds' : 'editorBounds'] = win.getBounds();
@@ -596,6 +645,7 @@ function setupIpc() {
   handle('win:setMode', (m) => { setMode(m); refreshTrayMenu(); });
   handle('win:fullscreen', (on) => setFullscreen(on));
   handle('win:recenter', () => recenterOverlay());
+  handle('toast:show', (msg, ms) => { showToast(msg, ms); });
 
   handle('update:status', () => updateStatus);
   handle('update:check', () => checkForUpdates());
