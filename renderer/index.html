@@ -220,11 +220,12 @@
         <div class="row"><span>Text size <em id="v-immersiveZoom"></em><small class="row-hint">Bigger or smaller text in the overlay only (Ctrl + scroll over it).</small></span><input type="range" min="50" max="300" step="10" data-setting="immersiveZoom" data-scale="100"></div>
         <div class="row"><span>Margins<small class="row-hint">Space between the text and the edge of the overlay.</small></span><div class="seg" data-setting="immersiveMargins"><button data-v="none">None</button><button data-v="narrow">Narrow</button><button data-v="normal">Normal</button><button data-v="wide">Wide</button></div></div>
         <div class="row"><span>Overlay opacity <em id="v-overlayOpacity"></em><small class="row-hint">See-through-ness of the whole overlay, text included. <b class="k" data-accel="opacityShortcut"></b> steps through 100 → 80 → 60 → 40 → 20%. The editor is never see-through.</small></span><input type="range" min="15" max="100" data-setting="overlayOpacity" data-scale="100"></div>
+        <div class="row"><span>Overlay always on top<small class="row-hint">Keeps the immersive overlay above other windows. <b>Immersive mode only</b> — the editor, including full screen, is a normal window that other apps can go in front of.</small></span><label class="switch"><input type="checkbox" data-setting="alwaysOnTop"><i></i></label></div>
         <div class="row"><span>Background opacity <em id="v-backgroundOpacity"></em><small class="row-hint">Only the overlay's background — lower it to see what's behind while the text stays solid.</small></span><input type="range" min="0" max="100" data-setting="backgroundOpacity" data-scale="100"></div>
       </section>
       <section>
         <h3>Window</h3>
-        <div class="row"><span>Always on top<small class="row-hint">Keep Lecture Notes above other windows, in both modes.</small></span><label class="switch"><input type="checkbox" data-setting="alwaysOnTop"><i></i></label></div>
+        <div class="row"><span>Minimize to the tray<small class="row-hint">Off: minimizing puts Lecture Notes on the taskbar like any app. On: it hides in the tray's hidden icons (^ by the clock) — click the icon there or press <b class="k" data-accel="toggleShortcut"></b> to bring it back.</small></span><label class="switch"><input type="checkbox" data-setting="minimizeToTray"><i></i></label></div>
         <div class="row"><span>Start with Windows<small class="row-hint">Open Lecture Notes automatically when you sign in.</small></span><label class="switch"><input type="checkbox" data-setting="launchAtStartup"><i></i></label></div>
       </section>
       <section>

@@ -41,7 +41,8 @@ const DEFAULTS = {
   scrollLines: 0,                        // lines per scroll step when 3+ shown: 0 = auto (3), -1 = a whole view
   immersiveZoom: 1,                      // text scale in immersive mode
   editorPage: 'paper',                   // page colour in dark mode: paper (white) | gray | black
-  alwaysOnTop: true,
+  alwaysOnTop: true,                     // immersive overlay only — the editor is a normal window
+  minimizeToTray: false,                 // minimizing hides to the tray (hidden icons) instead of the taskbar
   launchAtStartup: false,
   defaultFont: 'Arial',
   defaultFontSize: 10,
@@ -125,7 +126,7 @@ function createWindow() {
     maximizable: false,
     fullscreenable: false,
     show: false,
-    alwaysOnTop: settings.alwaysOnTop,
+    alwaysOnTop: false,                  // set by applyAlwaysOnTop()
     skipTaskbar: settings.mode === 'immersive',   // the overlay stays out of the taskbar (tray icon still has it)
     title: 'Lecture Notes',
     icon: path.join(__dirname, 'build', 'icon.png'),
@@ -159,6 +160,8 @@ function createWindow() {
     settings[key] = win.getBounds();
     saveSettings();
   };
+  // "Minimize to tray": a minimized window is hidden, so it's only in the tray's hidden icons.
+  win.on('minimize', () => { if (settings.minimizeToTray && !TEST_HIDDEN) { hideToast(); win.hide(); } });
   win.on('moved', remember);
   win.on('resized', remember);
   win.on('resize', () => placeToast());
@@ -171,9 +174,10 @@ function createWindow() {
   setupContextMenu();
 }
 
+// "Always on top" is for the immersive overlay only: the editor (full screen included) is a normal window.
 function applyAlwaysOnTop() {
-  if (!win) return;
-  if (settings.alwaysOnTop && !TEST_HIDDEN) win.setAlwaysOnTop(true, 'screen-saver');
+  if (!win || win.isDestroyed()) return;
+  if (settings.alwaysOnTop && settings.mode === 'immersive' && !TEST_HIDDEN) win.setAlwaysOnTop(true, 'screen-saver');
   else win.setAlwaysOnTop(false);
 }
 
@@ -297,6 +301,7 @@ function setMode(mode) {
   saveSettings();
   win.webContents.send('mode', mode);
   applyTaskbar();
+  applyAlwaysOnTop();
   refreshTrayMenu();
   updateWheelHook();
   if (SHORTCUTS_ON) setTimeout(() => setOverlayShortcuts(settings.mode === 'immersive'), 0);
@@ -666,7 +671,7 @@ function setupIpc() {
   ipcMain.on('win:resize', (_e, b) => { if (win) win.setBounds({ x: Math.round(b.x), y: Math.round(b.y), width: Math.max(160, Math.round(b.width)), height: Math.max(18, Math.round(b.height)) }); });
   handle('win:workArea', () => screen.getDisplayMatching(win.getBounds()).workArea);
   handle('win:hide', () => win.hide());
-  handle('win:minimize', () => win.minimize());
+  handle('win:minimize', () => { if (settings.minimizeToTray && !TEST_HIDDEN) { hideToast(); win.hide(); } else win.minimize(); });
   handle('win:quit', () => { quitting = true; app.quit(); });
   handle('win:setMode', (m) => { setMode(m); refreshTrayMenu(); });
   handle('win:fullscreen', (on) => setFullscreen(on));

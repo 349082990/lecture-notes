@@ -1963,7 +1963,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
           checked: S.linesPerView === n,
         })),
       },
-      { id: "alwaysOnTop", label: "Always on top", checked: !!S.alwaysOnTop },
+      { id: "alwaysOnTop", label: "Overlay always on top (immersive only)", checked: !!S.alwaysOnTop },
     ],
     insert: () => [
       { id: "image", label: "Image…" },
