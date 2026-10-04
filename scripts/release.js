@@ -36,9 +36,25 @@ sh(`npm version ${bump} --no-git-tag-version --allow-same-version`, { stdio: 'pi
 const version = pkg().version;
 console.log(`\nReleasing Lecture Notes v${version} to github.com/${pub.owner}/${pub.repo}\n`);
 
+// electron-builder creates the GitHub release from two parallel uploads (installer + blockmap)
+// that race each other and fail with HTTP 422, so create the release up front.
+async function ensureRelease(tag) {
+  const api = `https://api.github.com/repos/${pub.owner}/${pub.repo}/releases`;
+  const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
+  if ((await fetch(`${api}/tags/${tag}`, { headers })).ok) return;
+  const r = await fetch(api, {
+    method: 'POST', headers,
+    body: JSON.stringify({ tag_name: tag, name: tag.slice(1), body: `Lecture Notes ${tag.slice(1)}` })
+  });
+  if (!r.ok) throw new Error(`Couldn't create release ${tag}: ${r.status} ${await r.text()}`);
+}
+
+(async () => {
 try {
+  await ensureRelease(`v${version}`);
   sh('npx electron-builder --win --publish always', { env: { ...process.env, GH_TOKEN: token } });
-} catch {
+} catch (e) {
+  if (e && e.message && !e.status) console.error(e.message);
   sh('git checkout -- package.json package-lock.json');
   fail('Build or upload failed — version bump undone.');
 }
@@ -48,3 +64,4 @@ if (out('git status --porcelain')) sh(`git commit -m "Release v${version}"`);
 sh(`git tag v${version}`);
 sh('git push --follow-tags');
 console.log(`\n✔ v${version} is live. Installed apps will update the next time they're restarted.\n`);
+})();
