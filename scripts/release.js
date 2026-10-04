@@ -28,7 +28,7 @@ if (!token) {
 }
 
 const bump = process.argv[2] || 'patch';
-sh(`npm version ${bump} --no-git-tag-version`, { stdio: 'pipe' });
+sh(`npm version ${bump} --no-git-tag-version --allow-same-version`, { stdio: 'pipe' });
 const version = pkg().version;
 console.log(`\nReleasing Lecture Notes v${version} to github.com/${pub.owner}/${pub.repo}\n`);
 
@@ -40,7 +40,7 @@ try {
 }
 
 sh('git add package.json package-lock.json');
-sh(`git commit -m "Release v${version}"`);
+if (out('git status --porcelain')) sh(`git commit -m "Release v${version}"`);
 sh(`git tag v${version}`);
 sh('git push --follow-tags');
 console.log(`\n✔ v${version} is live. Installed apps will update the next time they're restarted.\n`);

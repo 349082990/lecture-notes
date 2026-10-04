@@ -59,7 +59,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "GITHUB_USER",
+        "owner": "349082990",
         "repo": "lecture-notes-releases",
         "releaseType": "release"
       }
