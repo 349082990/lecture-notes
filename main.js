@@ -9,6 +9,10 @@ const fsp = fs.promises;
 const { pathToFileURL, fileURLToPath } = require('url');
 
 app.setAppUserModelId('com.lecturenotes.app');
+// Dev-only: automated tests run with LN_TEST_HIDDEN=1 — no window, tray icon or global shortcuts on screen.
+const TEST_HIDDEN = !app.isPackaged && process.env.LN_TEST_HIDDEN === '1';
+const TEST_OFFSET = TEST_HIDDEN ? -30000 : 0;
+if (TEST_HIDDEN) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
@@ -24,7 +28,7 @@ const DEFAULTS = {
   backgroundOpacity: 0.94,               // background only
   linesPerView: 25,                      // 1 | 2 | 25
   immersiveZoom: 1,                      // text scale in immersive mode
-  editorPage: 'paper',                   // paper (white page) | match (follows theme)
+  editorPage: 'paper',                   // page colour in dark mode: paper (white) | gray | black
   alwaysOnTop: true,
   launchAtStartup: false,
   defaultFont: 'Arial',
@@ -52,6 +56,7 @@ const launchedAt = Date.now();
 function loadSettings() {
   try {
     const s = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+    if (s.editorPage === 'match') s.editorPage = 'gray'; // 1.0 "Dark page"
     return { ...DEFAULTS, ...s };
   } catch { return { ...DEFAULTS }; }
 }
@@ -86,8 +91,9 @@ function onScreen(b) {
   });
 }
 function boundsFor(mode) {
-  const b = mode === 'immersive' ? settings.immersiveBounds : settings.editorBounds;
-  return onScreen(b) ? b : defaultBounds(mode);
+  const s = mode === 'immersive' ? settings.immersiveBounds : settings.editorBounds;
+  const b = onScreen(s) ? s : defaultBounds(mode);
+  return TEST_HIDDEN ? { ...b, x: b.x + TEST_OFFSET } : b;
 }
 
 function createWindow() {
@@ -116,7 +122,12 @@ function createWindow() {
   });
   applyAlwaysOnTop();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  win.once('ready-to-show', () => { win.show(); });
+  win.once('ready-to-show', () => {
+    if (!TEST_HIDDEN) return win.show();
+    // painted (so screenshots work) but parked far off-screen, out of the taskbar
+    win.setSkipTaskbar(true); win.setAlwaysOnTop(false);
+    win.setPosition(TEST_OFFSET, 0); win.showInactive();
+  });
 
   win.on('close', (e) => {
     if (!quitting) { e.preventDefault(); win.hide(); }
@@ -139,7 +150,7 @@ function createWindow() {
 
 function applyAlwaysOnTop() {
   if (!win) return;
-  if (settings.alwaysOnTop) win.setAlwaysOnTop(true, 'screen-saver');
+  if (settings.alwaysOnTop && !TEST_HIDDEN) win.setAlwaysOnTop(true, 'screen-saver');
   else win.setAlwaysOnTop(false);
 }
 
@@ -167,8 +178,9 @@ function setFullscreen(on) {
   if (on === !!fullBounds) return;
   if (on) {
     fullBounds = win.getBounds();
-    win.setBounds(screen.getDisplayMatching(fullBounds).bounds);
-    if (!win.isVisible()) win.show();
+    const d = TEST_HIDDEN ? screen.getPrimaryDisplay().bounds : screen.getDisplayMatching(fullBounds).bounds;
+    win.setBounds({ ...d, x: d.x + TEST_OFFSET });
+    if (!win.isVisible() && !TEST_HIDDEN) win.show();
     win.focus();
   } else {
     const b = fullBounds;
@@ -640,8 +652,7 @@ app.whenReady().then(async () => {
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!settings.launchAtStartup });
   setupIpc();
   createWindow();
-  createTray();
-  registerShortcuts();
+  if (!TEST_HIDDEN) { createTray(); registerShortcuts(); }
   setupUpdater();
 });
 app.on('before-quit', () => { quitting = true; });

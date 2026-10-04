@@ -40,7 +40,7 @@
     <button class="tb" data-cmd="print" title="Print (Ctrl+P)" data-icon="print"></button>
     <button class="tb" data-cmd="spell" title="Spell check" data-icon="spell"></button>
     <span class="sep"></span>
-    <select id="zoom" title="Zoom">
+    <select id="zoom" title="Zoom (Ctrl + scroll)">
       <option value="fit">Fit</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="0.9">90%</option>
       <option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option><option value="2">200%</option>
     </select>
@@ -115,6 +115,11 @@
   <footer id="statusbar">
     <span id="word-count">0 words</span>
     <span class="grow"></span>
+    <span class="zoom-ctl">
+      <button id="zoom-out" title="Zoom out (Ctrl+−)" data-icon="minus" data-size="13"></button>
+      <button id="zoom-label" title="Reset to 100% (Ctrl+0)">100%</button>
+      <button id="zoom-in" title="Zoom in (Ctrl++)" data-icon="plus" data-size="13"></button>
+    </span>
     <span id="hint">Ctrl+] hide · Ctrl+Alt+I immersive</span>
   </footer>
 </div>
@@ -185,9 +190,24 @@
     <div class="settings-body">
       <section>
         <h3>Appearance</h3>
-        <div class="row"><span>Theme</span><div class="seg" data-setting="theme"><button data-v="system">System</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
-        <div class="row"><span>Dark theme style</span><div class="seg" data-setting="darkStyle"><button data-v="black">Pure black</button><button data-v="gray">Dark gray</button></div></div>
-        <div class="row"><span>Editor page in dark mode</span><div class="seg" data-setting="editorPage"><button data-v="paper">White paper</button><button data-v="match">Dark page</button></div></div>
+        <div class="pv-row">
+          <div class="pv-head"><span>Theme</span><small>System follows your Windows light / dark setting.</small></div>
+          <div class="pv-group" data-setting="theme" data-preview="theme">
+            <button data-v="system">System</button><button data-v="light">Light</button><button data-v="dark">Dark</button>
+          </div>
+        </div>
+        <div class="pv-row">
+          <div class="pv-head"><span>Dark mode background</span><small>The window around your page when the app is dark.</small></div>
+          <div class="pv-group" data-setting="darkStyle" data-preview="darkStyle">
+            <button data-v="black" data-default>Pure black</button><button data-v="gray">Dark gray</button>
+          </div>
+        </div>
+        <div class="pv-row">
+          <div class="pv-head"><span>Page color in dark mode</span><small>The document page itself. Light mode always uses a white page.</small></div>
+          <div class="pv-group" data-setting="editorPage" data-preview="editorPage">
+            <button data-v="paper" data-default>White</button><button data-v="gray">Gray</button><button data-v="black">Black</button>
+          </div>
+        </div>
       </section>
       <section>
         <h3>Overlay</h3>

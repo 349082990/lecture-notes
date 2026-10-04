@@ -48,7 +48,9 @@
     r.setProperty('--doc-font', `"${S.defaultFont}"`);
     r.setProperty('--doc-size', S.defaultFontSize + 'pt');
     r.setProperty('--doc-ls', S.defaultLineSpacing);
-    document.body.classList.toggle('page-match', S.editorPage === 'match');
+    document.body.classList.toggle('page-gray', S.editorPage === 'gray');
+    document.body.classList.toggle('page-black', S.editorPage === 'black');
+    document.body.classList.toggle('page-dark', S.editorPage === 'gray' || S.editorPage === 'black');
     document.body.classList.toggle('dark-black', S.darkStyle !== 'gray');
     document.body.classList.toggle('sidebar-open', !!S.sidebarOpen);
     $('#imm-lines').textContent = S.linesPerView === 25 ? '25' : S.linesPerView + 'L';
@@ -827,15 +829,42 @@
   }
 
   /* ---------------- zoom ---------------- */
+  // Full screen keeps its own zoom (default 100%) so a page that fits a small window isn't blown up to screen width.
+  const ZOOMS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+  const zoomSel = $('#zoom');
+  zoomSel.innerHTML = '';
+  zoomSel.add(new Option('Fit', 'fit')); // fit to window width, never above 100%
+  ZOOMS.forEach(z => zoomSel.add(new Option(Math.round(z * 100) + '%', String(z))));
+  const zoomKey = () => (fullscreen ? 'zoomFull' : 'zoom');
+  const zoomPref = () => String(ls.get(zoomKey(), fullscreen ? '1' : 'fit'));
   function currentZoom() { return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--zoom')) || 1; }
   function applyZoom() {
-    const v = ls.get('zoom', 'fit');
-    $('#zoom').value = v;
-    let z = v === 'fit' ? Math.max(0.5, Math.min(2, (canvas.clientWidth - 44) / 816)) : parseFloat(v);
+    const v = zoomPref();
+    if (![...zoomSel.options].some(o => o.value === v)) zoomSel.add(new Option(Math.round(v * 100) + '%', v));
+    zoomSel.value = v;
+    let z = v === 'fit' ? Math.max(0.5, Math.min(1, (canvas.clientWidth - 44) / 816)) : parseFloat(v); // fit only shrinks
     if (!isFinite(z) || z <= 0) z = 1;
     document.documentElement.style.setProperty('--zoom', z);
+    $('#zoom-label').textContent = (v === 'fit' ? 'Fit ' : '') + Math.round(z * 100) + '%';
   }
-  $('#zoom').onchange = (e) => { ls.set('zoom', e.target.value); applyZoom(); page.focus(); };
+  function setZoom(v) { ls.set(zoomKey(), String(v)); applyZoom(); }
+  function stepZoom(dir) {
+    const z = currentZoom();
+    const next = dir > 0 ? ZOOMS.find(s => s > z + 0.001) : [...ZOOMS].reverse().find(s => s < z - 0.001);
+    if (next) setZoom(next);
+  }
+  zoomSel.onchange = (e) => { setZoom(e.target.value); page.focus(); };
+  $('#zoom-in').onclick = () => stepZoom(1);
+  $('#zoom-out').onclick = () => stepZoom(-1);
+  $('#zoom-label').onclick = () => setZoom(1);
+  let wheelZoomAt = 0;
+  canvas.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    if (e.timeStamp - wheelZoomAt < 60) return; // one step per notch, even on touchpads
+    wheelZoomAt = e.timeStamp;
+    stepZoom(e.deltaY < 0 ? 1 : -1);
+  }, { passive: false });
 
   /* ---------------- find & replace ---------------- */
   let findOpen = false, findRanges = [], findIdx = -1;
@@ -955,7 +984,9 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       { id: 'immersive', label: 'Immersive mode', accel: S.immersiveShortcut },
       { id: 'docs', label: 'Document list', checked: !!S.sidebarOpen },
       { id: 'fullscreen', label: 'Full screen', accel: 'F11', checked: fullscreen },
-      { label: 'Zoom', submenu: ['fit', '0.5', '0.75', '0.9', '1', '1.25', '1.5', '2'].map(z => ({ id: 'zoom:' + z, label: z === 'fit' ? 'Fit' : Math.round(z * 100) + '%', checked: ls.get('zoom', 'fit') === z })) },
+      { label: 'Zoom', submenu: [{ id: 'zoom:in', label: 'Zoom in', accel: 'CmdOrCtrl+=' }, { id: 'zoom:out', label: 'Zoom out', accel: 'CmdOrCtrl+-' }, { id: 'zoom:1', label: 'Actual size (100%)', accel: 'CmdOrCtrl+0' }, { type: 'separator' }]
+        .concat(['fit', ...ZOOMS.map(String)].map(z => ({ id: 'zoom:' + z, label: z === 'fit' ? 'Fit to window' : Math.round(z * 100) + '%', checked: zoomPref() === z }))) },
+      { label: 'Page color in dark mode', submenu: [['paper', 'White'], ['gray', 'Gray'], ['black', 'Black']].map(([v, l]) => ({ id: 'page:' + v, label: l, checked: S.editorPage === v })) },
       { label: 'Theme', submenu: [['system', 'Use system setting'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => ({ id: 'theme:' + v, label: l, checked: S.theme === v }))
         .concat([{ type: 'separator' }], [['black', 'Dark style: pure black'], ['gray', 'Dark style: dark gray']].map(([v, l]) => ({ id: 'darkStyle:' + v, label: l, checked: (S.darkStyle || 'black') === v }))) },
       { label: 'Immersive lines', submenu: [1, 2, 25].map(n => ({ id: 'lines:' + n, label: n === 25 ? 'Default (25 max)' : `${n} line${n > 1 ? 's' : ''}`, checked: S.linesPerView === n })) },
@@ -1007,7 +1038,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       case 'pastePlain': restoreSel(); plainNext = true; setTimeout(() => (plainNext = false), 600); return api.call('edit:native', 'paste');
       case 'find': return openFind(true);
       case 'immersive': return setMode(S.mode === 'immersive' ? 'editor' : 'immersive');
-      case 'zoom': ls.set('zoom', arg); return applyZoom();
+      case 'zoom': return arg === 'in' ? stepZoom(1) : arg === 'out' ? stepZoom(-1) : setZoom(arg);
+      case 'page': return setSetting({ editorPage: arg });
       case 'theme': return setSetting({ theme: arg });
       case 'darkStyle': return setSetting({ darkStyle: arg });
       case 'fullscreen': return api.call('win:fullscreen', !fullscreen);
@@ -1144,8 +1176,42 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   }));
 
   /* ---------------- settings dialog ---------------- */
+  // Mini editor mock-ups for the appearance choices. Colours are fixed (not theme tokens) so each card
+  // shows what that option looks like, combined with whatever else is currently chosen.
+  const PV_WIN = {
+    light: { chrome: '#f9fbfd', bar: '#edf2fa', canvas: '#f9fbfd', border: '#dadce0', line: '#5f6368' },
+    gray: { chrome: '#1b1b1b', bar: '#282a2c', canvas: '#0b0b0b', border: '#3c4043', line: '#9aa0a6' },
+    black: { chrome: '#000000', bar: '#141414', canvas: '#000000', border: '#262626', line: '#9aa0a6' }
+  };
+  const PV_PAGE = {
+    paper: { page: '#ffffff', edge: '#d0d0d0', text: '#a9adb1' },
+    gray: { page: '#262626', edge: '#3a3a3a', text: '#6e6e6e' },
+    black: { page: '#000000', edge: '#2e2e2e', text: '#555555' }
+  };
+  function pvHtml(win, pg, cls = '') {
+    const w = PV_WIN[win], p = PV_PAGE[win === 'light' ? 'paper' : pg] || PV_PAGE.paper;
+    const vars = `--pv-chrome:${w.chrome};--pv-bar:${w.bar};--pv-canvas:${w.canvas};--pv-border:${w.border};--pv-line:${w.line};--pv-page:${p.page};--pv-page-edge:${p.edge};--pv-text:${p.text}`;
+    return `<span class="pv ${cls}" style="${vars}"><i class="pv-top"></i><i class="pv-bar"></i><span class="pv-canvas"><span class="pv-page"><b></b><b></b><b></b><b></b></span></span></span>`;
+  }
+  function renderPreviews() {
+    const dark = S.darkStyle === 'gray' ? 'gray' : 'black', pg = S.editorPage || 'paper';
+    $$('.pv-group[data-preview]').forEach(group => {
+      $$('button', group).forEach(b => {
+        if (!b.dataset.label) b.dataset.label = b.textContent.trim();
+        const v = b.dataset.v;
+        let mock;
+        if (group.dataset.preview === 'theme') {
+          mock = v === 'light' ? pvHtml('light') : v === 'dark' ? pvHtml(dark, pg) : pvHtml('light') + pvHtml(dark, pg, 'pv-dark-half');
+        } else if (group.dataset.preview === 'darkStyle') mock = pvHtml(v, pg);
+        else mock = pvHtml(dark, v);
+        b.innerHTML = `<span class="pv-stack">${mock}</span><span class="pv-label">${escHtml(b.dataset.label)}${'default' in b.dataset ? '<em>Default</em>' : ''}</span>`;
+      });
+    });
+  }
+
   function fillSettings() {
-    $$('.seg[data-setting]').forEach(seg => {
+    renderPreviews();
+    $$('.seg[data-setting], .pv-group[data-setting]').forEach(seg => {
       const v = String(S[seg.dataset.setting]);
       $$('button', seg).forEach(b => b.classList.toggle('on', b.dataset.v === v));
     });
@@ -1178,7 +1244,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   }
   $('#btn-settings').onclick = openSettings;
   $('#btn-hide').onclick = () => run('hide');
-  $$('.seg[data-setting]').forEach(seg => seg.addEventListener('click', (e) => {
+  $$('.seg[data-setting], .pv-group[data-setting]').forEach(seg => seg.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
     const v = 'num' in seg.dataset ? +b.dataset.v : b.dataset.v;
     setSetting({ [seg.dataset.setting]: v }).then(fillSettings);
@@ -1242,6 +1308,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     const b = $('#btn-fullscreen');
     b.title = fullscreen ? 'Exit full screen (F11)' : 'Full screen (F11)';
     b.innerHTML = icon(fullscreen ? 'fullscreenExit' : 'fullscreen');
+    applyZoom();
   }
   $('#btn-fullscreen').onclick = () => run('fullscreen');
 
@@ -1316,9 +1383,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       if (code === 'KeyC') return go('wordCount');
       if (code === 'KeyV') { plainNext = true; setTimeout(() => (plainNext = false), 600); return; }
       if (code === 'KeyZ') return go('redo');
+      if (code === 'Equal') return go('zoom:in');
       return;
     }
     switch (code) {
+      case 'Equal': case 'NumpadAdd': return go('zoom:in');
+      case 'Minus': case 'NumpadSubtract': return go('zoom:out');
+      case 'Digit0': case 'Numpad0': return go('zoom:1');
       case 'KeyS': e.preventDefault(); cur.dirty = true; saveNow().then(() => toast('Saved', 1200)); return;
       case 'KeyN': return go('new');
       case 'KeyO': return go('docs');

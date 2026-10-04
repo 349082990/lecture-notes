@@ -23,6 +23,7 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 | Ctrl + scroll, or A− / A+ | Immersive: text size |
 | Esc | Immersive: back to the editor (editor: leave full screen) |
 | F11 | Editor: full screen on / off |
+| Ctrl + = / Ctrl + − / Ctrl + 0, or Ctrl + scroll | Editor: zoom in / out / back to 100% |
 | Ctrl + N / Ctrl + O | New document / document list |
 | Ctrl + F / Ctrl + H | Find / Find and replace |
 | Ctrl + K | Link |
@@ -38,8 +39,8 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 - **Immersive mode** — no window bar or buttons, just the text on a rounded card. Drag anywhere to move it (including right up to the top edge of the screen); drag the left/right edges to change the width. The height adjusts itself to the lines being shown. Hover to reveal tiny controls (lines per view, text size, exit, hide).
 - **Lines per view** (Settings, or the "25 / 1L / 2L" button on hover): 1 line, 2 lines, or default (up to 25). In 1- or 2-line mode nothing else is visible until you scroll. Images aren't cut up by the line rule — they show whole, as their own step. Your reading position is remembered per document.
 - **Documents** — the ☰ button (top-left) lists every document with a preview. Right-click for rename, move to folder, delete, new folder. Drag documents onto folders to organise them. Everything autosaves as plain .html files in `Documents\Lecture Notes` (change the folder in Settings).
-- **Full screen** — press F11, click the full-screen button in the title bar, or use View → Full screen to fill the whole screen with the editor. F11 or Esc leaves it.
-- **Settings** — theme (follows Windows by default, or force light/dark; dark is pure black by default, with a dark-gray option), overlay opacity, background opacity, always-on-top, start with Windows, immersive margins (narrow by default) and text size, editor page margins, default font/size/spacing, shortcuts, documents folder.
+- **Full screen** — press F11, click the full-screen button in the title bar, or use View → Full screen to fill the whole screen with the editor. F11 or Esc leaves it. Full screen opens at 100% zoom and remembers its own zoom level; use the − / + by the status bar's zoom percentage, Ctrl + scroll, or Ctrl + = / −.
+- **Settings** — theme (follows Windows by default, or force light/dark; dark is pure black by default, with a dark-gray option; the page stays white in dark mode unless you pick gray or black — each choice shows a small preview), overlay opacity, background opacity, always-on-top, start with Windows, immersive margins (narrow by default) and text size, editor page margins, default font/size/spacing, shortcuts, documents folder.
 - The window stays on top and stays open until you hide it with Ctrl + ] — there's no close button. The tray icon (near the clock) can also show/hide, reset the window position, or quit.
 
 ## Updates

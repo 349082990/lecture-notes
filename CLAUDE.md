@@ -18,5 +18,8 @@ Source lives in the private `lecture-notes` repo; only installers go to the publ
 ## Gotchas
 
 - Running Electron from this shell: `ELECTRON_RUN_AS_NODE` is set, so use `env -u ELECTRON_RUN_AS_NODE npx electron .`
-- The installed app holds a single-instance lock; test a dev copy with `--user-data-dir=<temp>` and a
-  `settings.json` there whose `docsFolder` points at a temp folder, so real notes aren't touched.
+- The installed app holds a single-instance lock (per profile folder). To test a dev copy alongside it, use
+  `--user-data-dir=<temp>` with a `settings.json` there whose `docsFolder` points at a temp folder (so real
+  notes aren't touched) AND `LN_TEST_HIDDEN=1`, which parks the window off-screen with no taskbar entry,
+  tray icon or global shortcuts — otherwise the user sees a second copy of the app. Drive it with
+  `--remote-debugging-port` + CDP (Runtime.evaluate, Page.captureScreenshot).
