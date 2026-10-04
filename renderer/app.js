@@ -271,6 +271,17 @@
     unwrapLists(c);
     return c.innerHTML;
   }
+  // Downloads and printing are always black text on white: "default colour" text is black there.
+  function exportHtml() {
+    const c = document.createElement("div");
+    c.innerHTML = serialize();
+    c.querySelectorAll(".ln-ink").forEach((e) => {
+      e.style.color = "#000000";
+      e.classList.remove("ln-ink");
+      if (!e.className) e.removeAttribute("class");
+    });
+    return c.innerHTML;
+  }
   // Chromium makes a list inside the paragraph it came from (<p><ul>…</ul></p>). That isn't valid
   // HTML and reopens as stray empty paragraphs around the list, so lift lists out when saving.
   // (Only on the saved copy — changing the live page would break undo.)
@@ -1834,7 +1845,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       "export:file",
       fmt,
       baseName(cur.rel),
-      serialize(),
+      exportHtml(),
       pageCss(),
     );
     if (p) toast("Saved " + p.split(/[\\/]/).pop());
@@ -2097,7 +2108,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return api.call("docs:openFolder", dirOf(cur.rel));
       case "print":
         await saveNow();
-        return safeCall("print", baseName(cur.rel), serialize(), pageCss());
+        return safeCall("print", baseName(cur.rel), exportHtml(), pageCss());
       case "hide":
         await saveNow();
         return api.call("win:hide");

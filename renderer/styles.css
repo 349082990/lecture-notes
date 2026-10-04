@@ -283,6 +283,9 @@ body.mode-immersive.dragging #imm { cursor: grabbing; }
   font-family: var(--doc-font), Arial, sans-serif; font-size: var(--doc-size); line-height: var(--doc-ls);
   color: var(--imm-text); overflow-wrap: break-word; transform-origin: 0 0;
 }
+/* "default text colour" for black text pasted inside coloured text — follows the page / overlay theme */
+#page .ln-ink { color: var(--page-text); }
+#imm-content .ln-ink { color: var(--imm-text); }
 #imm-content img { max-height: var(--imm-img-max, 70vh); }
 #imm-empty { color: var(--muted); font-size: 12px; padding: 2px 0; }
 #imm-controls {

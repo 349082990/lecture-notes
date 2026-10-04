@@ -1,7 +1,7 @@
 // Clipboard HTML → clean, self-contained HTML that keeps the formatting.
 (function () {
   const DROP_TAGS = 'script,style,meta,link,title,xml,iframe,object,embed,noscript,form,input,button,select,textarea,svg,canvas,video,audio,base,template';
-  const KEEP_CLASSES = new Set(['title', 'subtitle', 'checklist', 'ln-table']);
+  const KEEP_CLASSES = new Set(['title', 'subtitle', 'checklist', 'ln-table', 'ln-ink']);
   // properties copied when a stylesheet (e.g. Word "MsoNormal") is resolved into inline styles
   const INLINE_PROPS = ['font-weight', 'font-style', 'text-decoration-line', 'color', 'background-color',
     'font-size', 'font-family', 'vertical-align'];
@@ -79,6 +79,15 @@
     } finally { ifr.remove(); }
   }
 
+  // Is el's nearest coloured ancestor (within the pasted fragment) a real colour?
+  function insideColour(el, body) {
+    for (let a = el.parentElement; a && a !== body; a = a.parentElement) {
+      if (a.classList.contains('ln-ink')) return false;
+      if (a.style.color || a.getAttribute('color')) return true;
+    }
+    return false;
+  }
+
   function sanitize(html) {
     const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
     const body = doc.body;
@@ -118,7 +127,12 @@
       if (st && st.length) {
         // Default black text / white background become "theme" colours so dark mode stays readable.
         const L = colorLum(st.color);
-        if (L !== null && L < 0.02) st.removeProperty('color');
+        if (L !== null && L < 0.02) {
+          st.removeProperty('color');
+          // Black text inside coloured text (Google Docs puts a bullet's colour on the whole <li>):
+          // with its colour gone it would take the parent's colour, so mark it "default text colour".
+          if (insideColour(el, body)) el.classList.add('ln-ink');
+        }
         const bg = st.backgroundColor;
         if (bg && (colorAlpha(bg) === 0 || (colorLum(bg) ?? 0) > 0.97)) st.removeProperty('background-color');
         if (st.background && !st.backgroundColor) st.removeProperty('background');
