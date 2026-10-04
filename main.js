@@ -36,7 +36,7 @@ const DEFAULTS = {
   alwaysOnTop: true,
   launchAtStartup: false,
   defaultFont: 'Arial',
-  defaultFontSize: 8,
+  defaultFontSize: 10,
   defaultLineSpacing: 1.15,
   mode: 'editor',
   editorBounds: null,
@@ -61,6 +61,9 @@ function loadSettings() {
   try {
     const s = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
     if (s.editorPage === 'match') s.editorPage = 'gray'; // 1.0 "Dark page"
+    // 1.3: default text went from 8 pt to 10 pt. The settings file stores every value, so move
+    // the old default once; a size someone actually picked (anything but 8) is left alone.
+    if (!s.defaultSize10) { if (s.defaultFontSize === 8) s.defaultFontSize = 10; s.defaultSize10 = true; }
     return { ...DEFAULTS, ...s };
   } catch { return { ...DEFAULTS }; }
 }

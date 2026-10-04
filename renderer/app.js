@@ -191,7 +191,20 @@
       e.classList.remove("sel");
       if (!e.className) e.removeAttribute("class");
     });
+    unwrapLists(c);
     return c.innerHTML;
+  }
+  // Chromium makes a list inside the paragraph it came from (<p><ul>…</ul></p>). That isn't valid
+  // HTML and reopens as stray empty paragraphs around the list, so lift lists out when saving.
+  // (Only on the saved copy — changing the live page would break undo.)
+  function unwrapLists(root) {
+    root.querySelectorAll("p > ul, p > ol").forEach((list) => {
+      const p = list.parentElement;
+      const onlyList = [...p.childNodes].every(
+        (n) => n === list || n.nodeName === "BR" || (n.nodeType === 3 && !n.nodeValue.trim()),
+      );
+      if (onlyList) p.replaceWith(list);
+    });
   }
   const saveSoon = debounce(() => saveNow(), 600);
   function markDirty() {
@@ -682,7 +695,7 @@
     updateToolbarSoon();
   }
 
-  let pendingPt = 8;
+  let pendingPt = 10;
   function fixFontTags() {
     $$('font[size="7"]', page).forEach((f) => {
       f.removeAttribute("size");
@@ -1004,7 +1017,27 @@
   $("#imm").addEventListener("contextmenu", () =>
     api.ctxInfo({ immersive: true }),
   );
+  // "* " at the start of a line turns it into a bulleted list, like Google Docs / Word.
+  function autoBullet() {
+    const sel = getSelection();
+    if (!sel.rangeCount || !sel.isCollapsed) return false;
+    const block = anchorEl().closest("p,div,h1,h2,h3,h4,h5,h6,li,td,th");
+    if (!block || !page.contains(block) || block.closest("li,td,th")) return false;
+    const before = document.createRange();
+    before.setStart(block, 0);
+    before.setEnd(sel.anchorNode, sel.anchorOffset);
+    if (before.toString() !== "*") return false;
+    sel.removeAllRanges();
+    sel.addRange(before);
+    document.execCommand("delete"); // remove the "*" (stays undoable)
+    exec("insertUnorderedList");
+    return true;
+  }
   page.addEventListener("keydown", (e) => {
+    if (e.key === " " && !e.ctrlKey && !e.altKey && !e.metaKey && autoBullet()) {
+      e.preventDefault();
+      return;
+    }
     if (selImg && (e.key === "Delete" || e.key === "Backspace")) {
       e.preventDefault();
       imgOp("delete");
