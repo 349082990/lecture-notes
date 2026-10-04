@@ -2553,6 +2553,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   }
   $("#btn-settings").onclick = openSettings;
   $("#btn-hide").onclick = () => run("hide");
+  $("#btn-close").onclick = () => run("quit");
   $$(".seg[data-setting], .pv-group[data-setting]").forEach((seg) =>
     seg.addEventListener("click", (e) => {
       const b = e.target.closest("button");
