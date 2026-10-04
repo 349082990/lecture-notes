@@ -222,7 +222,10 @@ window.Immersive = (function () {
       const ci = Math.max(0, Math.min(chunks.length - 1, chunkIndexFor(start) + dir));
       start = chunks[ci].s;
     } else {
-      const step = big ? Math.max(1, opts.lines - 2) : opts.step;
+      const r0 = range();
+      const view = r0 ? r0.e - r0.s + 1 : opts.lines;
+      // step -1 = move a whole view at a time
+      const step = big ? Math.max(1, opts.lines - 2) : opts.step === -1 ? view : Math.max(1, opts.step || 3);
       start = Math.max(0, Math.min(lines.length - 1, start + dir * step));
       if (dir > 0) {
         const r = range();

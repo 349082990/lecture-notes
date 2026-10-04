@@ -38,7 +38,7 @@
     --muted: #9aa0a6;
     --border: #3c4043;
     --hover: rgba(227, 227, 227, .08);
-    --canvas: #0b0b0b;
+    --canvas: #1f1f1f;          /* dark gray all the way around the page */
     --pop: #2b2b2b;
     --imm-rgb: 43, 43, 43;
     --imm-text: #ececec;
@@ -381,6 +381,15 @@ body.mode-immersive .rz[data-edge="e"], body.mode-immersive .rz[data-edge="w"] {
 .settings-body h3 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 36px; flex-wrap: wrap; }
 .row > span { font-size: 13px; }
+.row > span .row-hint { display: block; color: var(--muted); font-size: 11.5px; max-width: 300px; margin-top: 1px; }
+.row > span.sub { color: var(--muted); padding-left: 12px; }
+.stepper { display: inline-flex; align-items: center; gap: 4px; transition: opacity .15s; }
+.stepper.dim { opacity: .55; }
+.stepper button { width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 6px; background: transparent; font-size: 14px; display: inline-grid; place-items: center; }
+.stepper button:hover { background: var(--hover); }
+.modal .stepper input:not([type]) { display: inline-block; margin: 0; padding: 0; width: 44px; height: 26px; text-align: center; border: 1px solid var(--border); border-radius: 6px; background: transparent; font-variant-numeric: tabular-nums; }
+.stepper input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.stepper small { color: var(--muted); font-size: 11.5px; margin-left: 2px; white-space: nowrap; }
 .row em { color: var(--muted); font-style: normal; margin-left: 4px; font-variant-numeric: tabular-nums; }
 .row select { height: 30px; border: 1px solid var(--border); border-radius: 6px; background: var(--pop); padding: 0 6px; min-width: 150px; }
 .row input[type=range] { width: 200px; accent-color: var(--accent); }

@@ -123,7 +123,7 @@
     $("#imm-lines").textContent =
       S.linesPerView === 25 ? "25" : S.linesPerView + "L";
     $("#imm-lines").title =
-      `Lines per view: ${S.linesPerView === 25 ? "default (25 max)" : S.linesPerView} — click to change`;
+      `Lines per view: ${S.linesPerView === 25 ? "default (25 max)" : S.linesPerView} — click or ${prettyAccel(S.linesShortcut)} to change`;
     $("#hint").textContent =
       `${prettyAccel(S.toggleShortcut)} hide · ${prettyAccel(S.immersiveShortcut)} immersive`;
     window.docDefaults = {
@@ -153,8 +153,25 @@
     return {
       lines: +S.linesPerView || 25,
       zoom: +S.immersiveZoom || 1,
-      step: 3,
+      step: +S.scrollLines || 3, // 0 = automatic (3); -1 = a whole view
     };
+  }
+  // Lines-per-view modes the cycle shortcut / button steps through: 1, 2, your custom number, 25.
+  function lineModes() {
+    const c = Math.max(1, Math.min(25, +S.customLines || 3));
+    return [...new Set([1, 2, c, 25])].sort((a, b) => a - b);
+  }
+  function cycleLines() {
+    const order = lineModes();
+    const i = order.indexOf(+S.linesPerView);
+    const n = order[(i + 1) % order.length];
+    setSetting({ linesPerView: n });
+    toast(
+      n === 25
+        ? "Showing up to 25 lines"
+        : `Showing ${n} line${n > 1 ? "s" : ""} at a time`,
+      1400,
+    );
   }
   function prettyAccel(a) {
     return (a || "")
@@ -1795,7 +1812,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       },
       {
         label: "Immersive lines",
-        submenu: [1, 2, 25].map((n) => ({
+        submenu: lineModes().map((n) => ({
           id: "lines:" + n,
           label: n === 25 ? "Default (25 max)" : `${n} line${n > 1 ? "s" : ""}`,
           checked: S.linesPerView === n,
@@ -1991,6 +2008,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return update.state === "ready" ? installUpdate() : checkForUpdates();
       case "lines":
         return setSetting({ linesPerView: +arg });
+      case "cycleLines":
+        return cycleLines();
       case "alwaysOnTop":
         return setSetting({ alwaysOnTop: !S.alwaysOnTop });
       case "image": {
@@ -2153,17 +2172,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   $("#btn-immersive").onclick = () => setMode("immersive");
   $("#imm-exit").onclick = () => setMode("editor");
   $("#imm-hide").onclick = () => api.call("win:hide");
-  $("#imm-lines").onclick = () => {
-    const order = [1, 2, 25];
-    const n = order[(order.indexOf(+S.linesPerView) + 1) % 3];
-    setSetting({ linesPerView: n });
-    toast(
-      n === 25
-        ? "Showing up to 25 lines"
-        : `Showing ${n} line${n > 1 ? "s" : ""} at a time`,
-      1400,
-    );
-  };
+  $("#imm-lines").onclick = cycleLines;
   const zoomBy = (d) =>
     setSetting(
       {
@@ -2295,7 +2304,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     gray: {
       chrome: "#1b1b1b",
       bar: "#282a2c",
-      canvas: "#0b0b0b",
+      canvas: "#1f1f1f",
       border: "#3c4043",
       line: "#9aa0a6",
     },
@@ -2366,6 +2375,9 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     $('select[data-setting="defaultLineSpacing"]').value = String(
       S.defaultLineSpacing,
     );
+    $('select[data-setting="scrollLines"]').value = String(+S.scrollLines || 0);
+    $('select[data-setting="anywhereScroll"]').value = S.anywhereScroll || "off";
+    fillLines();
     $$(".shortcut").forEach(
       (i) => (i.value = prettyAccel(S[i.dataset.setting])),
     );
@@ -2438,7 +2450,41 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     setSetting({
       toggleShortcut: "CommandOrControl+]",
       immersiveShortcut: "CommandOrControl+Alt+I",
+      linesShortcut: "CommandOrControl+Alt+M",
+      anywhereScroll: "alt",
     }).then(fillSettings);
+
+  // lines shown at a time: 1 / 2 / custom (1–25) / default 25
+  const linesSeg = $("#lines-seg"),
+    linesN = $("#lines-custom-n");
+  const isCustomLines = () => ![1, 2, 25].includes(+S.linesPerView);
+  function fillLines() {
+    const v = isCustomLines() ? "custom" : String(S.linesPerView);
+    $$("button", linesSeg).forEach((b) =>
+      b.classList.toggle("on", b.dataset.v === v),
+    );
+    linesN.value = isCustomLines() ? S.linesPerView : +S.customLines || 3;
+    $("#lines-custom").classList.toggle("dim", !isCustomLines());
+  }
+  function setCustomLines(n) {
+    n = Math.max(1, Math.min(25, Math.round(+n) || 3));
+    setSetting({ linesPerView: n, customLines: n }).then(fillLines);
+  }
+  linesSeg.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.v === "custom") setCustomLines(linesN.value);
+    else setSetting({ linesPerView: +b.dataset.v }).then(fillLines);
+  });
+  $$("#lines-custom button").forEach((b) =>
+    b.addEventListener("click", () =>
+      setCustomLines((+linesN.value || 3) + +b.dataset.d),
+    ),
+  );
+  linesN.addEventListener("change", () => setCustomLines(linesN.value));
+  linesN.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") setCustomLines(linesN.value);
+  });
 
   // shortcut recorder
   const CODE_MAP = {
@@ -2505,12 +2551,11 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return;
       }
       const accel = [...mods, k].join("+");
-      const other =
-        inp.dataset.setting === "toggleShortcut"
-          ? "immersiveShortcut"
-          : "toggleShortcut";
-      if (S[other] === accel) {
-        inp.value = "Already used by the other shortcut";
+      const taken = ["toggleShortcut", "immersiveShortcut", "linesShortcut"]
+        .filter((k) => k !== inp.dataset.setting)
+        .some((k) => S[k] === accel);
+      if (taken) {
+        inp.value = "Already used by another shortcut";
         return;
       }
       inp.classList.remove("rec");
@@ -2703,6 +2748,11 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     run(c);
   });
   api.on("set-setting", (patch) => setSetting(patch));
+  // Alt + scroll (or the chosen modifier) over any other app — sent by the main process.
+  api.on("imm-scroll", (dir, steps) => {
+    if (S.mode !== "immersive") return;
+    for (let i = 0; i < Math.min(5, steps || 1); i++) Immersive.go(dir);
+  });
   api.on("fullscreen", applyFullscreen);
   api.on("update-status", (u) => {
     applyUpdateStatus(u);

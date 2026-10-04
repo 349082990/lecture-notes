@@ -21,12 +21,16 @@ const DEFAULTS = {
   darkStyle: 'black',                    // black | gray — how dark mode looks
   toggleShortcut: 'CommandOrControl+]',
   immersiveShortcut: 'CommandOrControl+Alt+I',
+  linesShortcut: 'CommandOrControl+Alt+M',  // cycle lines shown in immersive mode
+  anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
   docsFolder: path.join(app.getPath('documents'), 'Lecture Notes'),
   immersiveMargins: 'narrow',            // none | narrow | normal | wide
   editorMargins: 'normal',               // narrow | normal | wide
   overlayOpacity: 1,                     // whole overlay (text + background)
   backgroundOpacity: 0.94,               // background only
-  linesPerView: 25,                      // 1 | 2 | 25
+  linesPerView: 25,                      // 1–25 (25 = default)
+  customLines: 3,                        // the "Custom" choice for lines per view
+  scrollLines: 0,                        // lines per scroll step when 3+ shown: 0 = auto (3), -1 = a whole view
   immersiveZoom: 1,                      // text scale in immersive mode
   editorPage: 'paper',                   // page colour in dark mode: paper (white) | gray | black
   alwaysOnTop: true,
@@ -129,8 +133,13 @@ function createWindow() {
     win.setPosition(TEST_OFFSET, 0); win.showInactive();
   });
 
+  // Alt+F4 (or "Close window" on the taskbar) quits the app completely. The page saves first,
+  // then asks to quit; the timer is a fallback if it doesn't answer. Ctrl+] still just hides.
   win.on('close', (e) => {
-    if (!quitting) { e.preventDefault(); win.hide(); }
+    if (quitting) return;
+    e.preventDefault();
+    win.webContents.send('cmd', 'quit');
+    setTimeout(() => { quitting = true; app.quit(); }, 1500);
   });
   const remember = () => {
     if (!win || win.isDestroyed() || win.isMinimized() || fullBounds) return;
@@ -200,6 +209,7 @@ function setMode(mode) {
   win.setBounds(boundsFor(mode));
   saveSettings();
   win.webContents.send('mode', mode);
+  updateWheelHook();
   if (!win.isVisible()) { mode === 'immersive' ? win.showInactive() : win.show(); }
 }
 
@@ -220,7 +230,47 @@ function registerShortcuts() {
     if (!win.isVisible()) { win.showInactive(); }
     setMode(settings.mode === 'immersive' ? 'editor' : 'immersive');
   });
+  reg('linesShortcut', settings.linesShortcut, () => { if (win) win.webContents.send('cmd', 'cycleLines'); });
   if (win && !win.isDestroyed()) win.webContents.send('shortcut-errors', shortcutErrors);
+}
+
+/* ---------------- scroll from anywhere (immersive) ---------------- */
+// Holding a modifier (Alt by default) while scrolling over any app moves the immersive view.
+// Electron can't see wheel events outside its windows, so this uses a system-wide input hook
+// (uiohook-napi) that only runs while immersive mode is on.
+const WHEEL_MODS = { alt: ['alt'], 'ctrl+alt': ['ctrl', 'alt'], 'shift+alt': ['shift', 'alt'], 'ctrl+shift': ['ctrl', 'shift'] };
+let hook = null, hookOn = false, altMasked = false;
+function updateWheelHook() {
+  const want = !TEST_HIDDEN && settings.mode === 'immersive' && !!WHEEL_MODS[settings.anywhereScroll];
+  if (want === hookOn) return;
+  try {
+    if (!hook) {
+      hook = require('uiohook-napi');
+      hook.uIOhook.on('wheel', onGlobalWheel);
+      hook.uIOhook.on('keyup', (e) => {
+        if (e.keycode === hook.UiohookKey.Alt || e.keycode === hook.UiohookKey.AltRight) altMasked = false;
+      });
+    }
+    if (want) hook.uIOhook.start(); else hook.uIOhook.stop();
+    hookOn = want;
+  } catch (e) { console.error('scroll hook unavailable', e); }
+}
+function stopWheelHook() {
+  if (hook && hookOn) { try { hook.uIOhook.stop(); } catch {} hookOn = false; }
+}
+function onGlobalWheel(e) {
+  if (!win || win.isDestroyed() || !win.isVisible() || settings.mode !== 'immersive') return;
+  if (e.direction !== hook.WheelDirection.VERTICAL || !e.rotation) return;
+  const mods = WHEEL_MODS[settings.anywhereScroll];
+  if (!mods) return;
+  const held = { alt: e.altKey, ctrl: e.ctrlKey, shift: e.shiftKey };
+  if (!['alt', 'ctrl', 'shift'].every(m => held[m] === mods.includes(m))) return;
+  // Over the overlay itself the page's own wheel handling already scrolls.
+  const p = screen.getCursorScreenPoint(), b = win.getBounds();
+  if (p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height) return;
+  // Releasing Alt on its own would open the focused app's menu bar; a harmless F24 tap cancels that.
+  if (mods.includes('alt') && !altMasked) { altMasked = true; try { hook.uIOhook.keyTap(hook.UiohookKey.F24); } catch {} }
+  win.webContents.send('imm-scroll', e.rotation > 0 ? 1 : -1, Math.abs(e.rotation)); // rotation > 0 = towards you
 }
 
 /* ---------------- tray ---------------- */
@@ -304,7 +354,7 @@ function setupContextMenu() {
     }
     if (ctxInfo.immersive) {
       t.push({ label: 'Exit immersive mode', click: () => setMode('editor') });
-      t.push({ label: 'Lines per view', submenu: [1, 2, 25].map(n => ({ label: n === 25 ? 'Default (25 max)' : `${n} line${n > 1 ? 's' : ''}`, type: 'radio', checked: settings.linesPerView === n, click: () => win.webContents.send('set-setting', { linesPerView: n }) })) });
+      t.push({ label: 'Lines per view', submenu: [...new Set([1, 2, settings.customLines || 3, 25])].sort((a, b) => a - b).map(n => ({ label: n === 25 ? 'Default (25 max)' : `${n} line${n > 1 ? 's' : ''}`, type: 'radio', checked: settings.linesPerView === n, click: () => win.webContents.send('set-setting', { linesPerView: n }) })) });
       t.push({ label: 'Hide', click: () => win.hide() });
     } else if (p.isEditable) {
       t.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' },
@@ -433,7 +483,8 @@ function setupIpc() {
     if ('theme' in patch) nativeTheme.themeSource = settings.theme;
     if ('alwaysOnTop' in patch) applyAlwaysOnTop();
     if ('launchAtStartup' in patch && app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!settings.launchAtStartup });
-    if (patch.toggleShortcut !== undefined || patch.immersiveShortcut !== undefined) { registerShortcuts(); refreshTrayMenu(); }
+    if (['toggleShortcut', 'immersiveShortcut', 'linesShortcut'].some(k => patch[k] !== undefined)) { registerShortcuts(); refreshTrayMenu(); }
+    if ('anywhereScroll' in patch) updateWheelHook();
     if ('docsFolder' in patch && patch.docsFolder !== old.docsFolder) { previewCache.clear(); await ensureRoot(); }
     if ('mode' in patch) refreshTrayMenu();
     saveSettings();
@@ -654,7 +705,9 @@ app.whenReady().then(async () => {
   createWindow();
   if (!TEST_HIDDEN) { createTray(); registerShortcuts(); }
   setupUpdater();
+  updateWheelHook();
 });
 app.on('before-quit', () => { quitting = true; });
-app.on('will-quit', () => globalShortcut.unregisterAll());
-app.on('window-all-closed', () => {});
+app.on('will-quit', () => { globalShortcut.unregisterAll(); stopWheelHook(); });
+// The window only ever goes away when quitting (closing it quits too) — never leave a windowless process behind.
+app.on('window-all-closed', () => { quitting = true; app.quit(); });

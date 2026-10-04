@@ -218,7 +218,10 @@
       </section>
       <section>
         <h3>Immersive mode</h3>
-        <div class="row"><span>Lines shown at a time</span><div class="seg" data-setting="linesPerView" data-num><button data-v="1">1 line</button><button data-v="2">2 lines</button><button data-v="25">Default (25 max)</button></div></div>
+        <div class="row"><span>Lines shown at a time</span><div class="seg" id="lines-seg"><button data-v="1">1 line</button><button data-v="2">2 lines</button><button data-v="custom">Custom</button><button data-v="25">Default (25 max)</button></div></div>
+        <div class="row"><span class="sub">Custom number of lines</span><span class="stepper" id="lines-custom"><button data-d="-1" title="Fewer">−</button><input id="lines-custom-n" inputmode="numeric" maxlength="2"><button data-d="1" title="More">+</button><small>lines (1–25)</small></span></div>
+        <div class="row"><span>Lines per scroll<small class="row-hint">When 3 or more lines are shown. 1- and 2-line views always move to the next line(s).</small></span>
+          <select data-setting="scrollLines" data-num><option value="0">Automatic (3 lines)</option><option value="1">1 line</option><option value="2">2 lines</option><option value="3">3 lines</option><option value="4">4 lines</option><option value="5">5 lines</option><option value="6">6 lines</option><option value="8">8 lines</option><option value="10">10 lines</option><option value="-1">A whole view</option></select></div>
         <div class="row"><span>Margins</span><div class="seg" data-setting="immersiveMargins"><button data-v="none">None</button><button data-v="narrow">Narrow</button><button data-v="normal">Normal</button><button data-v="wide">Wide</button></div></div>
         <div class="row"><span>Text size <em id="v-immersiveZoom"></em></span><input type="range" min="50" max="300" step="10" data-setting="immersiveZoom" data-scale="100"></div>
       </section>
@@ -233,6 +236,9 @@
         <h3>Keyboard shortcuts <small>(work from any app)</small></h3>
         <div class="row"><span>Show / hide overlay</span><div class="sc-wrap"><input class="shortcut" data-setting="toggleShortcut" readonly><small class="sc-err" data-err="toggleShortcut"></small></div></div>
         <div class="row"><span>Toggle immersive mode</span><div class="sc-wrap"><input class="shortcut" data-setting="immersiveShortcut" readonly><small class="sc-err" data-err="immersiveShortcut"></small></div></div>
+        <div class="row"><span>Switch lines shown (1 / 2 / custom / 25)</span><div class="sc-wrap"><input class="shortcut" data-setting="linesShortcut" readonly><small class="sc-err" data-err="linesShortcut"></small></div></div>
+        <div class="row"><span>Scroll immersive view from any app<small class="row-hint">Hold this and scroll anywhere on screen. Normal scrolling over the overlay still works.</small></span>
+          <select data-setting="anywhereScroll"><option value="alt">Alt + scroll</option><option value="ctrl+alt">Ctrl + Alt + scroll</option><option value="shift+alt">Shift + Alt + scroll</option><option value="ctrl+shift">Ctrl + Shift + scroll</option><option value="off">Off</option></select></div>
         <div class="row"><span></span><button class="text-btn" id="sc-reset">Reset to defaults</button></div>
       </section>
       <section>

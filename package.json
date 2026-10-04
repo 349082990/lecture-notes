@@ -10,9 +10,10 @@
   },
   "author": "Lecture Notes",
   "dependencies": {
+    "electron-updater": "^6.6.2",
     "html-to-docx": "^1.8.0",
     "mammoth": "^1.13.0",
-    "electron-updater": "^6.6.2"
+    "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
     "electron": "^33.4.11",

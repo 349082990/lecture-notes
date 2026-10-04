@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   resize: (b) => ipcRenderer.send('win:resize', b),
   ctxInfo: (info) => ipcRenderer.sendSync('ctx-info', info),
   on: (ch, fn) => {
-    const allowed = ['mode', 'cmd', 'theme-changed', 'shortcut-errors', 'set-setting', 'fullscreen', 'update-status'];
+    const allowed = ['mode', 'cmd', 'theme-changed', 'shortcut-errors', 'set-setting', 'fullscreen', 'update-status', 'imm-scroll'];
     if (allowed.includes(ch)) ipcRenderer.on(ch, (_e, ...a) => fn(...a));
   }
 });
