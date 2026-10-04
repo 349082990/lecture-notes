@@ -67,6 +67,7 @@
   /* ---------------- settings ---------------- */
   let S = await api.call("settings:get");
   let fullscreen = false;
+  const SHORTCUT_KEYS = ["toggleShortcut", "immersiveShortcut", "linesShortcut", "opacityShortcut", "headingPrevShortcut", "headingNextShortcut"];
   let update = { state: "idle" };
   const IMM_PAD = {
     none: [4, 3],
@@ -154,12 +155,63 @@
       lines: +S.linesPerView || 25,
       zoom: +S.immersiveZoom || 1,
       step: +S.scrollLines || 3, // 0 = automatic (3); -1 = a whole view
+      flatHeadings: S.immersiveHeadings !== "original",
     };
   }
   // Lines-per-view modes the cycle shortcut / button steps through: 1, 2, your custom number, 25.
   function lineModes() {
     const c = Math.max(1, Math.min(25, +S.customLines || 3));
     return [...new Set([1, 2, c, 25])].sort((a, b) => a - b);
+  }
+  // Overlay opacity steps 100 → 75 → 50 → 25% → back to 100%.
+  function cycleOpacity() {
+    const cur = +S.overlayOpacity || 1;
+    const next = [0.75, 0.5, 0.25].find((v) => v < cur - 0.01) || 1;
+    setSetting({ overlayOpacity: next }, true);
+    toast(
+      `Overlay opacity ${Math.round(next * 100)}%` +
+        (S.mode === "immersive" ? "" : " — shows in the overlay"),
+      1400,
+    );
+  }
+  // Previous / next heading: in the overlay it jumps there; in the editor it scrolls there.
+  function jumpHeading(dir) {
+    if (S.mode === "immersive") {
+      if (!Immersive.jumpHeading(dir))
+        toast(dir > 0 ? "No more headings below" : "No more headings above", 1200);
+      return;
+    }
+    const hs = $$("h1,h2,h3,h4,h5,h6", page).filter((h) => h.textContent.trim());
+    const top = canvas.getBoundingClientRect().top;
+    const pos = hs.map((h) => h.getBoundingClientRect().top - top);
+    let i = -1;
+    if (dir > 0) i = pos.findIndex((p) => p > 24);
+    else pos.forEach((p, k) => { if (p < 4) i = k; });
+    if (i < 0)
+      return toast(dir > 0 ? "No more headings below" : "No more headings above", 1200);
+    canvas.scrollBy({ top: pos[i] - 12 });
+    const r = document.createRange();
+    r.selectNodeContents(hs[i]);
+    r.collapse(true);
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    page.focus();
+  }
+  function matchesAccel(e, accel) {
+    if (!accel) return false;
+    const parts = accel.split("+");
+    const key = parts.pop();
+    const want = { ctrl: false, alt: false, shift: false, meta: false };
+    parts.forEach((m) => {
+      if (/^(CommandOrControl|CmdOrCtrl|Control|Ctrl)$/i.test(m)) want.ctrl = true;
+      else if (/^Alt$/i.test(m)) want.alt = true;
+      else if (/^Shift$/i.test(m)) want.shift = true;
+      else if (/^(Super|Meta|Command|Cmd)$/i.test(m)) want.meta = true;
+    });
+    return (
+      e.ctrlKey === want.ctrl && e.altKey === want.alt && e.shiftKey === want.shift &&
+      e.metaKey === want.meta && (keyName(e.code) || "").toLowerCase() === key.toLowerCase()
+    );
   }
   function cycleLines() {
     const order = lineModes();
@@ -2043,6 +2095,10 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return setSetting({ linesPerView: +arg });
       case "cycleLines":
         return cycleLines();
+      case "cycleOpacity":
+        return cycleOpacity();
+      case "heading":
+        return jumpHeading(arg === "prev" ? -1 : 1);
       case "alwaysOnTop":
         return setSetting({ alwaysOnTop: !S.alwaysOnTop });
       case "image": {
@@ -2411,6 +2467,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     $('select[data-setting="scrollLines"]').value = String(+S.scrollLines || 0);
     $('select[data-setting="anywhereScroll"]').value = S.anywhereScroll || "off";
     fillLines();
+    $$(".k[data-accel]").forEach((k) => (k.textContent = prettyAccel(S[k.dataset.accel])));
     $$(".shortcut").forEach(
       (i) => (i.value = prettyAccel(S[i.dataset.setting])),
     );
@@ -2484,6 +2541,9 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       toggleShortcut: "CommandOrControl+]",
       immersiveShortcut: "CommandOrControl+Alt+I",
       linesShortcut: "CommandOrControl+Alt+M",
+      opacityShortcut: "CommandOrControl+Alt+O",
+      headingPrevShortcut: "CommandOrControl+Alt+Up",
+      headingNextShortcut: "CommandOrControl+Alt+Down",
       anywhereScroll: "alt",
     }).then(fillSettings);
 
@@ -2584,7 +2644,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return;
       }
       const accel = [...mods, k].join("+");
-      const taken = ["toggleShortcut", "immersiveShortcut", "linesShortcut"]
+      const taken = SHORTCUT_KEYS
         .filter((k) => k !== inp.dataset.setting)
         .some((k) => S[k] === accel);
       if (taken) {
@@ -2664,6 +2724,14 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     const ctrl = e.ctrlKey || e.metaKey;
     if (S.mode === "immersive") {
       const k = e.key;
+      if (matchesAccel(e, S.headingPrevShortcut) || matchesAccel(e, S.headingNextShortcut)) {
+        e.preventDefault();
+        return jumpHeading(matchesAccel(e, S.headingPrevShortcut) ? -1 : 1);
+      }
+      if (matchesAccel(e, S.opacityShortcut)) {
+        e.preventDefault();
+        return cycleOpacity();
+      }
       if (
         ["ArrowDown", "ArrowRight", "PageDown", " ", "j", "Enter"].includes(k)
       ) {
@@ -2701,6 +2769,15 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     if (e.altKey && e.shiftKey && e.code === "Digit5") {
       e.preventDefault();
       return exec("strikeThrough");
+    }
+    // in the editor the heading keys are handled here (they're only global while the overlay shows)
+    if (matchesAccel(e, S.headingPrevShortcut) || matchesAccel(e, S.headingNextShortcut)) {
+      e.preventDefault();
+      return run(matchesAccel(e, S.headingPrevShortcut) ? "heading:prev" : "heading:next");
+    }
+    if (matchesAccel(e, S.opacityShortcut)) {
+      e.preventDefault();
+      return cycleOpacity();
     }
     if (!ctrl) return;
     const code = e.code,
@@ -2795,12 +2872,16 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   api.on("theme-changed", () => {
     if (S.mode === "immersive") Immersive.load(serialize(), Immersive.start);
   });
+  let lastShortcutErrs = "";
   api.on("shortcut-errors", (errs) => {
     S.shortcutErrors = errs;
     showShortcutErrors();
     const msgs = Object.values(errs);
-    if (msgs.length)
+    const sig = JSON.stringify(errs);
+    // shortcuts are re-registered on every mode switch — only mention a problem once
+    if (msgs.length && sig !== lastShortcutErrs)
       toast("Shortcut problem: " + msgs[0] + " — change it in Settings", 6000);
+    lastShortcutErrs = sig;
   });
   window.addEventListener("focus", () => refreshTreeSoon());
   document.addEventListener("visibilitychange", () => {

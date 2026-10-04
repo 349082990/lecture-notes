@@ -22,6 +22,10 @@ const DEFAULTS = {
   toggleShortcut: 'CommandOrControl+]',
   immersiveShortcut: 'CommandOrControl+Alt+I',
   linesShortcut: 'CommandOrControl+Alt+M',  // cycle lines shown in immersive mode
+  opacityShortcut: 'CommandOrControl+Alt+O', // overlay opacity 100 → 75 → 50 → 25%
+  headingPrevShortcut: 'CommandOrControl+Alt+Up',   // global only while the overlay shows
+  headingNextShortcut: 'CommandOrControl+Alt+Down',
+  immersiveHeadings: 'flat',             // flat (same size as text) | original
   anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
   docsFolder: path.join(app.getPath('documents'), 'Lecture Notes'),
   immersiveMargins: 'narrow',            // none | narrow | normal | wide
@@ -213,10 +217,13 @@ function setMode(mode) {
   saveSettings();
   win.webContents.send('mode', mode);
   updateWheelHook();
+  if (!TEST_HIDDEN) registerShortcuts(); // heading keys are only global in immersive mode
   if (!win.isVisible()) { mode === 'immersive' ? win.showInactive() : win.show(); }
 }
 
 /* ---------------- shortcuts ---------------- */
+const pretty = (a) => String(a).replace(/CommandOrControl|CmdOrCtrl/g, 'Ctrl').split('+').join(' + ');
+const SHORTCUT_KEYS = ['toggleShortcut', 'immersiveShortcut', 'linesShortcut', 'opacityShortcut', 'headingPrevShortcut', 'headingNextShortcut'];
 function registerShortcuts() {
   globalShortcut.unregisterAll();
   shortcutErrors = {};
@@ -224,8 +231,8 @@ function registerShortcuts() {
     if (!accel) return;
     try {
       const ok = globalShortcut.register(accel, fn);
-      if (!ok) shortcutErrors[key] = `"${accel}" is already used by another app`;
-    } catch (e) { shortcutErrors[key] = `"${accel}" is not a valid shortcut`; }
+      if (!ok) shortcutErrors[key] = `${pretty(accel)} is already used by another app`;
+    } catch (e) { shortcutErrors[key] = `${pretty(accel)} is not a valid shortcut`; }
   };
   reg('toggleShortcut', settings.toggleShortcut, toggleVisible);
   reg('immersiveShortcut', settings.immersiveShortcut, () => {
@@ -233,7 +240,15 @@ function registerShortcuts() {
     if (!win.isVisible()) { win.showInactive(); }
     setMode(settings.mode === 'immersive' ? 'editor' : 'immersive');
   });
-  reg('linesShortcut', settings.linesShortcut, () => { if (win) win.webContents.send('cmd', 'cycleLines'); });
+  const cmd = (c) => () => { if (win) win.webContents.send('cmd', c); };
+  reg('linesShortcut', settings.linesShortcut, cmd('cycleLines'));
+  reg('opacityShortcut', settings.opacityShortcut, cmd('cycleOpacity'));
+  // Ctrl+Alt+Up/Down mean something in lots of apps (editors, IDEs), so only take them over
+  // while the overlay is in use; in the editor the page handles them itself.
+  if (settings.mode === 'immersive') {
+    reg('headingPrevShortcut', settings.headingPrevShortcut, cmd('heading:prev'));
+    reg('headingNextShortcut', settings.headingNextShortcut, cmd('heading:next'));
+  }
   if (win && !win.isDestroyed()) win.webContents.send('shortcut-errors', shortcutErrors);
 }
 
@@ -486,14 +501,14 @@ function setupIpc() {
     if ('theme' in patch) nativeTheme.themeSource = settings.theme;
     if ('alwaysOnTop' in patch) applyAlwaysOnTop();
     if ('launchAtStartup' in patch && app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!settings.launchAtStartup });
-    if (['toggleShortcut', 'immersiveShortcut', 'linesShortcut'].some(k => patch[k] !== undefined)) { registerShortcuts(); refreshTrayMenu(); }
+    if (SHORTCUT_KEYS.some(k => patch[k] !== undefined)) { registerShortcuts(); refreshTrayMenu(); }
     if ('anywhereScroll' in patch) updateWheelHook();
     if ('docsFolder' in patch && patch.docsFolder !== old.docsFolder) { previewCache.clear(); await ensureRoot(); }
     if ('mode' in patch) refreshTrayMenu();
     saveSettings();
     return { ...settings, shortcutErrors };
   });
-  handle('shortcuts:pause', (paused) => { if (paused) globalShortcut.unregisterAll(); else registerShortcuts(); });
+  handle('shortcuts:pause', (paused) => { if (TEST_HIDDEN) return; if (paused) globalShortcut.unregisterAll(); else registerShortcuts(); });
 
   handle('win:getBounds', () => win.getBounds());
   handle('win:setBounds', (b) => {

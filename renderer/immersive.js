@@ -12,7 +12,9 @@ window.Immersive = (function () {
   let lines = [];          // [{t, b, img}] in px relative to content top (visual, after zoom)
   let chunks = null;       // for 1/2-line modes: [{s, e}] line ranges; null = sliding window
   let start = 0;           // index of first visible line
-  let opts = { lines: 25, zoom: 1, step: 3 };
+  let opts = { lines: 25, zoom: 1, step: 3, flatHeadings: true };
+  let heads = [];          // line index where each heading starts (for heading jumps)
+  let lastHtml = '';
   let maxH = 900;          // max card height (screen work area)
   let active = false;
   let lastWidth = 0;
@@ -50,9 +52,17 @@ window.Immersive = (function () {
     });
   }
 
+  const HEAD_SEL = 'h1,h2,h3,h4,h5,h6';
   function load(html, startLine) {
+    lastHtml = html;
     content.innerHTML = html;
     content.classList.add('doc');
+    content.classList.toggle('flat-headings', !!opts.flatHeadings);
+    if (opts.flatHeadings) {
+      // pasted headings often carry their size inline (e.g. Google Docs) — drop it, keep the rest
+      content.querySelectorAll(`:is(${HEAD_SEL}, p.subtitle) [style], :is(${HEAD_SEL}, p.subtitle)[style]`)
+        .forEach(el => el.style.removeProperty('font-size'));
+    }
     content.querySelectorAll('[contenteditable]').forEach(e => e.removeAttribute('contenteditable'));
     adaptColors();
     content.querySelectorAll('img').forEach(img => {
@@ -66,9 +76,11 @@ window.Immersive = (function () {
   function setOptions(o) {
     const keepTop = lines[start] ? lines[start].t / (opts.zoom || 1) : 0;
     const zoomChanged = o.zoom !== undefined && o.zoom !== opts.zoom;
+    const headsChanged = o.flatHeadings !== undefined && o.flatHeadings !== opts.flatHeadings;
     Object.assign(opts, o);
     if (o.maxH) maxH = o.maxH;
     if (!active) return;
+    if (headsChanged && lastHtml) { load(lastHtml, start); return; }
     measure();
     if (zoomChanged) start = nearestLine(keepTop * opts.zoom);
     buildChunks();
@@ -118,6 +130,13 @@ window.Immersive = (function () {
       }
       lines.push({ ...r });
     }
+    heads = [];
+    content.querySelectorAll(HEAD_SEL).forEach(h => {
+      if (!h.textContent.trim()) return;
+      const top = h.getBoundingClientRect().top - base;
+      const i = lines.findIndex(l => l.b > top + 1);
+      if (i >= 0 && heads[heads.length - 1] !== i) heads.push(i);
+    });
     lastWidth = w;
   }
 
@@ -234,6 +253,16 @@ window.Immersive = (function () {
     }
     render();
   }
+  // Jump to the next / previous heading; returns false when there isn't one.
+  function jumpHeading(dir) {
+    if (!lines.length || !heads.length) return false;
+    const cur = chunks ? chunks[chunkIndexFor(start)].s : start;
+    const target = dir > 0 ? heads.find(h => h > cur) : [...heads].reverse().find(h => h < cur);
+    if (target === undefined) return false;
+    start = target;
+    render();
+    return true;
+  }
   function home() { start = 0; render(); }
   function end() { start = lines.length - 1; if (chunks) start = chunks[chunks.length - 1].s; render(); }
 
@@ -255,7 +284,7 @@ window.Immersive = (function () {
   }).observe(card);
 
   return {
-    load, setOptions, go, home, end,
+    load, setOptions, go, home, end, jumpHeading,
     relayout: () => queueMeasure(),
     setActive(v) { active = v; if (v) { lastWidth = 0; measureAndRender(true); } },
     onPosition(fn) { onChange = fn; },

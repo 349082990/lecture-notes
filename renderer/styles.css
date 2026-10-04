@@ -76,7 +76,6 @@ svg { display: block; flex: none; }
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
-  opacity: var(--overlay-opacity);
 }
 body.mode-immersive #app { display: none; }
 body.fullscreen #app, body.fullscreen #modal-back { border-radius: 0; border: 0; }
@@ -381,6 +380,7 @@ body.mode-immersive .rz[data-edge="e"], body.mode-immersive .rz[data-edge="w"] {
 .settings-body h3 small { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 36px; flex-wrap: wrap; }
 .row > span { font-size: 13px; }
+.row:has(.row-hint) { padding: 5px 0; }
 .row > span .row-hint { display: block; color: var(--muted); font-size: 11.5px; max-width: 300px; margin-top: 1px; }
 .row > span.sub { color: var(--muted); padding-left: 12px; }
 .stepper { display: inline-flex; align-items: center; gap: 4px; transition: opacity .15s; }
@@ -467,3 +467,14 @@ body.mode-immersive .rz[data-edge="e"], body.mode-immersive .rz[data-edge="w"] {
 }
 .zoom-ctl button:hover { background: var(--hover); color: var(--text); }
 #zoom-label { min-width: 40px; }
+
+/* ============ settings: explanations ============ */
+.sec-intro { margin: -2px 0 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.k {
+  font: 600 11px/1 Consolas, monospace; padding: 1px 5px; border-radius: 4px; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--chrome-2); color: var(--text);
+}
+
+/* ============ immersive: headings at text size ============ */
+/* Same size as the surrounding text; the heading's own bold / italic / colour still shows. */
+#imm-content.flat-headings :is(h1, h2, h3, h4, h5, h6, h1.title, p.subtitle) { font-size: inherit; line-height: inherit; padding: 0; }
