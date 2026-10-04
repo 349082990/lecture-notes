@@ -1,6 +1,6 @@
 {
   "name": "lecture-notes",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Lecture Notes",
   "main": "main.js",
   "scripts": {
