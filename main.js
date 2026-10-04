@@ -24,12 +24,13 @@ const DEFAULTS = {
   toggleShortcut: 'CommandOrControl+]',
   immersiveShortcut: 'CommandOrControl+Alt+I',
   linesShortcut: 'CommandOrControl+Alt+M',  // cycle lines shown in immersive mode
-  opacityShortcut: 'CommandOrControl+Alt+O', // overlay opacity 100 → 75 → 50 → 25%
+  opacityShortcut: 'CommandOrControl+Alt+O', // overlay opacity 100 → 80 → 60 → 40 → 20%
   headingPrevShortcut: 'CommandOrControl+Alt+Up',   // global only while the overlay shows
   headingNextShortcut: 'CommandOrControl+Alt+Down',
   recenterShortcut: 'CommandOrControl+Alt+0',       // overlay back to the top of the screen, centred; global only while the overlay shows
   immersiveHeadings: 'flat',             // flat (same size as text) | original
   anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
+  headingScroll: 'ctrl+alt',             // modifier + scroll = previous / next heading (overlay: from any app): same choices
   docsFolder: path.join(app.getPath('documents'), 'Lecture Notes'),
   immersiveMargins: 'narrow',            // none | narrow | normal | wide
   editorMargins: 'normal',               // narrow | normal | wide
@@ -71,6 +72,7 @@ function loadSettings() {
     // 1.3: default text went from 8 pt to 10 pt. The settings file stores every value, so move
     // the old default once; a size someone actually picked (anything but 8) is left alone.
     if (!s.defaultSize10) { if (s.defaultFontSize === 8) s.defaultFontSize = 10; s.defaultSize10 = true; }
+    if (s.defaultFontSize > 10) s.defaultFontSize = 10;   // 1.8: no text bigger than 10 pt
     return { ...DEFAULTS, ...s };
   } catch { return { ...DEFAULTS }; }
 }
@@ -159,6 +161,8 @@ function createWindow() {
   };
   win.on('moved', remember);
   win.on('resized', remember);
+  win.on('resize', () => placeToast());
+  win.on('move', () => placeToast());
 
   // Block navigation away from the app (e.g. dropped links)
   win.webContents.on('will-navigate', (e, url) => { e.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); });
@@ -252,6 +256,15 @@ async function showToast(msg, ms = 2600) {
   await toastReady;
   if (!toastWin || toastWin.isDestroyed()) return;
   await toastWin.webContents.executeJavaScript(`document.getElementById('t').textContent = ${JSON.stringify(String(msg))}`).catch(() => {});
+  placeToast(true);
+  toastWin.showInactive();
+  toastWin.moveTop();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, ms);
+}
+// The overlay often resizes right after a message (e.g. 1 line → 25 lines): keep the message beside it.
+function placeToast(force) {
+  if (!toastWin || toastWin.isDestroyed() || !(force || toastWin.isVisible()) || !win || win.isDestroyed()) return;
   const b = win.getBounds();
   const real = { ...b, x: b.x - TEST_OFFSET };
   const wa = (onScreen(real) ? screen.getDisplayMatching(real) : screen.getPrimaryDisplay()).workArea;
@@ -260,10 +273,6 @@ async function showToast(msg, ms = 2600) {
   if (y + TOAST_H > wa.y + wa.height) y = real.y - TOAST_H - 4;                      // no room: above it
   if (y < wa.y) y = Math.min(real.y + real.height, wa.y + wa.height) - TOAST_H - 8;  // overlay fills the screen: inside its bottom edge
   toastWin.setBounds({ x: x + TEST_OFFSET, y: Math.round(y), width: TOAST_W, height: TOAST_H });
-  toastWin.showInactive();
-  toastWin.moveTop();
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, ms);
 }
 function hideToast() {
   clearTimeout(toastTimer);
@@ -350,7 +359,8 @@ function sendShortcutErrors() {
 }
 
 /* ---------------- scroll from anywhere (immersive) ---------------- */
-// Holding a modifier (Alt by default) while scrolling over any app moves the immersive view.
+// Holding a modifier (Alt by default) while scrolling over any app moves the immersive view;
+// another (Ctrl + Alt by default) jumps between headings.
 // Electron can't see wheel events outside its windows, so this uses a system-wide input hook
 // (uiohook-napi). It starts the first time the overlay is used and then stays running (events
 // are ignored outside immersive mode) — stopping and restarting it on every mode switch was
@@ -358,7 +368,8 @@ function sendShortcutErrors() {
 const WHEEL_MODS = { alt: ['alt'], 'ctrl+alt': ['ctrl', 'alt'], 'shift+alt': ['shift', 'alt'], 'ctrl+shift': ['ctrl', 'shift'] };
 let hook = null, hookOn = false, altMasked = false;
 function updateWheelHook() {
-  const enabled = (!TEST_HIDDEN || process.env.LN_TEST_HOOK === '1') && !!WHEEL_MODS[settings.anywhereScroll];
+  const enabled = (!TEST_HIDDEN || process.env.LN_TEST_HOOK === '1') &&
+    !!(WHEEL_MODS[settings.anywhereScroll] || WHEEL_MODS[settings.headingScroll]);
   const want = enabled && (hookOn || settings.mode === 'immersive');
   if (want === hookOn) return;
   try {
@@ -379,17 +390,25 @@ function stopWheelHook() {
 function onGlobalWheel(e) {
   if (!win || win.isDestroyed() || !win.isVisible() || settings.mode !== 'immersive') return;
   if (e.direction !== hook.WheelDirection.VERTICAL || !e.rotation) return;
-  const mods = WHEEL_MODS[settings.anywhereScroll];
-  if (!mods) return;
   const held = { alt: e.altKey, ctrl: e.ctrlKey, shift: e.shiftKey };
-  if (!['alt', 'ctrl', 'shift'].every(m => held[m] === mods.includes(m))) return;
-  // Over the overlay itself the page's own wheel handling already scrolls.
+  const matches = (mods) => !!mods && ['alt', 'ctrl', 'shift'].every(m => held[m] === mods.includes(m));
+  const headMods = WHEEL_MODS[settings.headingScroll];   // checked first: it wins if both use the same keys
+  const mods = matches(headMods) ? headMods : matches(WHEEL_MODS[settings.anywhereScroll]) ? WHEEL_MODS[settings.anywhereScroll] : null;
+  if (!mods) return;
+  // Over the overlay itself the page's own wheel handling already does this.
   const p = screen.getCursorScreenPoint(), b = win.getBounds();
   if (p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height) return;
   // Releasing Alt on its own would open the focused app's menu bar; a harmless F24 tap cancels that.
   if (mods.includes('alt') && !altMasked) { altMasked = true; try { hook.uIOhook.keyTap(hook.UiohookKey.F24); } catch {} }
-  win.webContents.send('imm-scroll', e.rotation > 0 ? 1 : -1, Math.abs(e.rotation)); // rotation > 0 = towards you
+  const dir = e.rotation > 0 ? 1 : -1;                   // rotation > 0 = towards you
+  if (mods === headMods) {
+    const now = Date.now();                              // one heading per notch, even from a touchpad
+    if (now - lastHeadingWheel < 120) return;
+    lastHeadingWheel = now;
+    win.webContents.send('cmd', dir > 0 ? 'heading:next' : 'heading:prev');
+  } else win.webContents.send('imm-scroll', dir, Math.abs(e.rotation));
 }
+let lastHeadingWheel = 0;
 
 /* ---------------- tray ---------------- */
 function createTray() {
@@ -580,7 +599,7 @@ async function listTree(dirAbs) {
   return out;
 }
 
-const WELCOME = `<h1 style="font-size:14pt">Welcome to Lecture Notes</h1>
+const WELCOME = `<h1>Welcome to Lecture Notes</h1>
 <p>This is a normal document — type, paste from Google Docs or Word, add images and tables.</p>
 <p><b>Shortcuts</b></p>
 <ul><li><b>Ctrl + ]</b> — show / hide the overlay (works from any app)</li>
@@ -617,7 +636,7 @@ function setupIpc() {
     if ('alwaysOnTop' in patch) applyAlwaysOnTop();
     if ('launchAtStartup' in patch && app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!settings.launchAtStartup });
     if (SHORTCUT_KEYS.some(k => patch[k] !== undefined)) { registerShortcuts(); refreshTrayMenu(); }
-    if ('anywhereScroll' in patch) updateWheelHook();
+    if ('anywhereScroll' in patch || 'headingScroll' in patch) updateWheelHook();
     if ('docsFolder' in patch && patch.docsFolder !== old.docsFolder) { previewCache.clear(); await ensureRoot(); }
     if ('mode' in patch) refreshTrayMenu();
     saveSettings();
@@ -749,7 +768,11 @@ function setupIpc() {
       await fsp.writeFile(r.filePath, wrapHtml(title, `<style>${pageCss}</style>` + body));
     } else if (format === 'docx') {
       const HTMLtoDOCX = require('html-to-docx');
-      const buf = await HTMLtoDOCX(wrapHtml(title, body), null, { font: settings.defaultFont, fontSize: settings.defaultFontSize * 2, table: { row: { cantSplit: true } } });
+      // Word's own heading styles are 13–26 pt; keep them at 10 pt like the app (bold instead).
+      const docBody = body.replace(/<(h[1-6])((?:\s[^>]*)?)>/gi, (m, tag, attrs) => /style=/i.test(attrs)
+        ? `<${tag}${attrs.replace(/style=(["'])/i, 'style=$1font-size:10pt;font-weight:bold;')}>`
+        : `<${tag}${attrs} style="font-size:10pt;font-weight:bold">`);
+      const buf = await HTMLtoDOCX(wrapHtml(title, docBody), null, { font: settings.defaultFont, fontSize: settings.defaultFontSize * 2, table: { row: { cantSplit: true } } });
       await fsp.writeFile(r.filePath, buf);
     } else {
       const pdf = await renderOffscreen(title, body, pageCss, (wc) => wc.printToPDF({ pageSize: 'Letter', printBackground: true, margins: { marginType: 'none' } }));

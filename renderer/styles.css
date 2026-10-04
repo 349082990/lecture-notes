@@ -183,13 +183,14 @@ body.fullscreen .rz { display: none; }
 
 /* ============ document content (shared by editor + immersive) ============ */
 .doc p, .doc div { margin: 0; }
-.doc h1, .doc h2, .doc h3, .doc h4 { font-weight: 400; margin: 0; line-height: 1.15; }
-.doc h1 { font-size: 20pt; padding: 10pt 0 3pt; }
-.doc h2 { font-size: 16pt; padding: 9pt 0 3pt; }
-.doc h3 { font-size: 14pt; padding: 8pt 0 2pt; color: #434343; }
-.doc h4 { font-size: 12pt; padding: 7pt 0 2pt; color: #666; }
-.doc h1.title { font-size: 26pt; padding: 0 0 3pt; }
-.doc p.subtitle { font-size: 15pt; color: #666; padding: 0 0 8pt; }
+/* nothing bigger than 10 pt: headings stand out by weight and colour instead of size */
+.doc h1, .doc h2, .doc h3, .doc h4 { font-weight: 700; margin: 0; line-height: 1.15; font-size: 10pt; }
+.doc h1 { padding: 8pt 0 2pt; }
+.doc h2 { padding: 6pt 0 2pt; }
+.doc h3 { padding: 5pt 0 1pt; color: #434343; }
+.doc h4 { padding: 4pt 0 1pt; color: #666; font-style: italic; }
+.doc h1.title { font-size: 10pt; padding: 0 0 3pt; }
+.doc p.subtitle { font-size: 10pt; color: #666; padding: 0 0 6pt; }
 @media (prefers-color-scheme: dark) {
   body.page-dark .doc h3, #imm .doc h3 { color: inherit; opacity: .85; }
   body.page-dark .doc h4, body.page-dark .doc .subtitle, #imm .doc h4, #imm .doc .subtitle { color: inherit; opacity: .7; }

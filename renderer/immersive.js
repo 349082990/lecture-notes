@@ -20,6 +20,7 @@ window.Immersive = (function () {
   let active = false;
   let lastWidth = 0;
   let onChange = () => {};
+  let headingWheel = () => false;
   let wheelAcc = 0;
   let measureQueued = false;
 
@@ -65,6 +66,7 @@ window.Immersive = (function () {
         .forEach(el => el.style.removeProperty('font-size'));
     }
     content.querySelectorAll('[contenteditable]').forEach(e => e.removeAttribute('contenteditable'));
+    capFontSizes(content);
     adaptColors();
     content.querySelectorAll('img').forEach(img => {
       if (!img.complete) img.addEventListener('load', () => queueMeasure(), { once: true });
@@ -296,6 +298,7 @@ window.Immersive = (function () {
   card.addEventListener('wheel', (e) => {
     if (!active) return;
     e.preventDefault();
+    if (headingWheel(e)) return;   // Ctrl + Alt + scroll (by default): previous / next heading
     if (e.ctrlKey) { window.dispatchEvent(new CustomEvent('imm-zoom', { detail: e.deltaY < 0 ? 0.1 : -0.1 })); return; }
     wheelAcc += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
     if (Math.abs(wheelAcc) >= 50) {        // one mouse-wheel notch (~100) = one step
@@ -315,6 +318,7 @@ window.Immersive = (function () {
     relayout: () => queueMeasure(),
     setActive(v) { active = v; if (v) { lastWidth = 0; measureAndRender(true); } },
     onPosition(fn) { onChange = fn; },
+    onHeadingWheel(fn) { headingWheel = fn; },
     get start() { return start; },
     get count() { return lines.length; },
     _debug: () => ({ lines, chunks, start, opts })

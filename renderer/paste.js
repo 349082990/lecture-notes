@@ -149,4 +149,19 @@
     return sanitize(work);
   };
   window.sanitizeHtml = sanitize;
+
+  // Nothing in a document is ever bigger than 10 pt (headings' own sizes are ≤ 10 pt in the CSS).
+  // Shrinks inline sizes (pasted, imported or from older documents) that come out larger.
+  // Works on the live DOM so em / % / px / <font size> all resolve. Returns how many changed.
+  const MAX_PX = 10 * 4 / 3 + 0.05;
+  window.capFontSizes = function (root) {
+    let n = 0;
+    root.querySelectorAll('[style*="font-size"], font[size], big').forEach(el => {
+      if (parseFloat(getComputedStyle(el).fontSize) <= MAX_PX) return;
+      el.removeAttribute('size');
+      el.style.fontSize = '10pt';
+      n++;
+    });
+    return n;
+  };
 })();

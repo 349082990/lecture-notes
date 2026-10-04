@@ -108,7 +108,8 @@
     "Trebuchet MS",
     "Verdana",
   ];
-  const SIZES = [6, 7, 8, 9, 10, 11, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96];
+  const MAX_PT = 10; // no text, headings included, is ever bigger than this
+  const SIZES = [6, 7, 8, 9, 10];
 
   function applySettings() {
     const r = document.documentElement.style;
@@ -176,7 +177,7 @@
     const c = Math.max(1, Math.min(25, +S.customLines || 3));
     return [...new Set([1, 2, c, 25])].sort((a, b) => a - b);
   }
-  // Overlay opacity steps 100 → 75 → 50 → 25% → back to 100%.
+  // Overlay opacity steps 100 → 80 → 60 → 40 → 20% → back to 100%.
   // Keep an open Settings dialog in step when a shortcut or menu changes a value.
   function refreshOpenSettings() {
     const dlg = document.getElementById("dlg-settings");
@@ -190,7 +191,7 @@
   }
   function cycleOpacity() {
     const cur = +S.overlayOpacity || 1;
-    const next = [0.75, 0.5, 0.25].find((v) => v < cur - 0.01) || 1;
+    const next = [0.8, 0.6, 0.4, 0.2].find((v) => v < cur - 0.01) || 1;
     setSetting({ overlayOpacity: next }, true);
     toast(
       `Overlay opacity ${Math.round(next * 100)}%` +
@@ -327,12 +328,14 @@
     }
     cur = { rel, dirty: false, saving: null };
     page.innerHTML = html && html.trim() ? html : "<p><br></p>";
+    const shrunk = capFontSizes(page); // documents from before the 10 pt limit
     titleInput.value = baseName(rel);
     document.title = baseName(rel) + " — Lecture Notes";
     saveState.textContent = "Saved to this PC";
     targetFolder = dirOf(rel);
     canvas.scrollTop = 0;
     setSetting({ lastDoc: rel }, true);
+    if (shrunk) markDirty();
     updateWordCount();
     renderTree();
     deselectImage();
@@ -767,6 +770,7 @@
   }
   function afterEdit() {
     fixFontTags();
+    capFontSizes(page);
     markDirty();
     updateToolbarSoon();
   }
@@ -783,7 +787,7 @@
     });
   }
   function setFontSize(pt) {
-    pt = Math.max(1, Math.min(400, Math.round(pt * 2) / 2));
+    pt = Math.max(1, Math.min(MAX_PT, Math.round(pt * 2) / 2));
     if (!isFinite(pt)) return;
     pendingPt = pt;
     restoreSel();
@@ -797,7 +801,7 @@
     const v = parseFloat($("#font-size").value) || S.defaultFontSize;
     const next =
       dir > 0
-        ? SIZES.find((s) => s > v) || v + 12
+        ? SIZES.find((s) => s > v) || MAX_PT
         : [...SIZES].reverse().find((s) => s < v) || Math.max(1, v - 1);
     setFontSize(next);
   }
@@ -1638,11 +1642,32 @@
   $("#zoom-out").onclick = () => stepZoom(-1);
   $("#zoom-label").onclick = () => setZoom(1);
   let wheelZoomAt = 0;
+  // Ctrl + Alt + scroll (Settings → Shortcuts) jumps between headings, in the editor and the overlay.
+  function wheelMatches(e, mods) {
+    if (!mods || mods === "off") return false;
+    const m = mods.split("+");
+    return e.ctrlKey === m.includes("ctrl") && e.altKey === m.includes("alt") && e.shiftKey === m.includes("shift");
+  }
+  let headWheelAt = 0;
+  function headingWheel(e) {
+    e.preventDefault();
+    const d = e.deltaY || e.deltaX; // Shift + wheel scrolls sideways
+    if (!d || e.timeStamp - headWheelAt < 120) return; // one heading per notch, even on touchpads
+    headWheelAt = e.timeStamp;
+    jumpHeading(d > 0 ? 1 : -1);
+  }
+  Immersive.onHeadingWheel((e) => wheelMatches(e, S.headingScroll) && (headingWheel(e), true));
+  canvas.addEventListener(
+    "wheel",
+    (e) => { if (!e.ctrlKey && wheelMatches(e, S.headingScroll)) headingWheel(e); },
+    { passive: false },
+  );
   canvas.addEventListener(
     "wheel",
     (e) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
+      if (wheelMatches(e, S.headingScroll)) return headingWheel(e);
       if (e.timeStamp - wheelZoomAt < 60) return; // one step per notch, even on touchpads
       wheelZoomAt = e.timeStamp;
       stepZoom(e.deltaY < 0 ? 1 : -1);
@@ -1782,8 +1807,8 @@
   function pageCss() {
     const m = (PAGE_PAD[S.editorMargins] || 96) / 96;
     return `@page{size:letter;margin:${m}in}body{margin:0;font-family:"${S.defaultFont}",Arial,sans-serif;font-size:${S.defaultFontSize}pt;line-height:${S.defaultLineSpacing};color:#000;overflow-wrap:break-word}
-p,div{margin:0}h1,h2,h3,h4{font-weight:400;margin:0;line-height:1.15}h1{font-size:20pt;padding:10pt 0 3pt}h2{font-size:16pt;padding:9pt 0 3pt}h3{font-size:14pt;padding:8pt 0 2pt;color:#434343}h4{font-size:12pt;padding:7pt 0 2pt;color:#666}
-h1.title{font-size:26pt;padding:0 0 3pt}p.subtitle{font-size:15pt;color:#666;padding:0 0 8pt}ul,ol{margin:0;padding-left:3.2em}li>p{display:inline}img{max-width:100%;height:auto}
+p,div{margin:0}h1,h2,h3,h4{font-weight:700;margin:0;line-height:1.15;font-size:10pt}h1{padding:8pt 0 2pt}h2{padding:6pt 0 2pt}h3{padding:5pt 0 1pt;color:#434343}h4{padding:4pt 0 1pt;color:#666;font-style:italic}
+h1.title{font-size:10pt;padding:0 0 3pt}p.subtitle{font-size:10pt;color:#666;padding:0 0 6pt}ul,ol{margin:0;padding-left:3.2em}li>p{display:inline}img{max-width:100%;height:auto}
 table{border-collapse:collapse;margin:4pt 0}table.ln-table{width:100%;table-layout:fixed}td,th{border:1px solid #9e9e9e;padding:4px 6px;vertical-align:top}hr{border:0;border-top:1px solid #9e9e9e}
 blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-checked=true]{text-decoration:line-through}a{color:#1155cc}`;
   }
@@ -2490,6 +2515,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     );
     $('select[data-setting="scrollLines"]').value = String(+S.scrollLines || 0);
     $('select[data-setting="anywhereScroll"]').value = S.anywhereScroll || "off";
+    $('select[data-setting="headingScroll"]').value = S.headingScroll || "off";
     fillLines();
     $$(".k[data-accel]").forEach((k) => (k.textContent = prettyAccel(S[k.dataset.accel])));
     $$(".shortcut:not(.rec)").forEach(
@@ -2570,6 +2596,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       headingNextShortcut: "CommandOrControl+Alt+Down",
       recenterShortcut: "CommandOrControl+Alt+0",
       anywhereScroll: "alt",
+      headingScroll: "ctrl+alt",
     }).then(fillSettings);
 
   // lines shown at a time: 1 / 2 / custom (1–25) / default 25

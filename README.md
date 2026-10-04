@@ -19,7 +19,8 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 | **Ctrl + ]** | Show / hide the overlay — works from any app (changeable in Settings) |
 | **Ctrl + Alt + I** | Switch between editor and immersive mode — works from any app (changeable) |
 | **Ctrl + Alt + M** | Immersive: switch lines shown (1 → 2 → custom → 25) — works from any app (changeable) |
-| **Ctrl + Alt + O** | Overlay opacity 100 → 75 → 50 → 25% — works from any app (changeable) |
+| **Ctrl + Alt + O** | Overlay opacity 100 → 80 → 60 → 40 → 20% — works from any app (changeable) |
+| **Ctrl + Alt + scroll** | Previous / next heading (scroll up / down) — in the editor, and from any app while the overlay is showing (changeable in Settings) |
 | **Ctrl + Alt + ↑ / ↓** | Previous / next heading — the overlay puts that heading on its first line (blank lines below it near the end of the document), the editor scrolls there (changeable; only taken from other apps while the overlay is showing) |
 | **Ctrl + Alt + 0** | Immersive: move the overlay to the very top of the screen, centred, same width (changeable; in the editor it's still Normal text) |
 | **Alt + scroll** (anywhere) | Immersive: scroll the overlay while your mouse is over any other app (modifier changeable, or off) |
@@ -39,7 +40,7 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 
 ## How it works
 
-- **Editor mode** — a normal page like Google Docs: fonts, sizes, bold/italic/underline/strikethrough, colours and highlight, headings, bullets/numbers/checklists, alignment, line & paragraph spacing, indent, links, images (paste, drag in, or Insert → Image; click an image to resize/align), tables (right-click a cell to add/remove rows and columns), find & replace, word count, spell check, zoom, print, and download as .docx / .pdf / .html. Defaults: Arial 10 pt, 1.15 spacing. Typing "* " at the start of a line starts a bulleted list.
+- **Editor mode** — a normal page like Google Docs: fonts, sizes, bold/italic/underline/strikethrough, colours and highlight, headings, bullets/numbers/checklists, alignment, line & paragraph spacing, indent, links, images (paste, drag in, or Insert → Image; click an image to resize/align), tables (right-click a cell to add/remove rows and columns), find & replace, word count, spell check, zoom, print, and download as .docx / .pdf / .html. Defaults: Arial 10 pt, 1.15 spacing. Nothing is ever bigger than 10 pt — headings stand out by bold and colour instead, and larger pasted or older text is shrunk to 10 pt. Typing "* " at the start of a line starts a bulleted list.
 - **Paste from Google Docs or Word** keeps the formatting, and images are copied into the document so they don't break later. File → Import also opens .docx files directly.
 - **Immersive mode** — no window bar or buttons, just the text on a rounded card. Drag anywhere to move it (including right up to the top edge of the screen); drag the left/right edges to change the width. The height adjusts itself to the lines being shown. Hover to reveal tiny controls (lines per view, text size, exit, hide).
 - **Lines per view** (Settings, the "25 / 1L / 2L" button on hover, or Ctrl + Alt + M): 1 line, 2 lines, a custom number (1–25), or default (up to 25). **Lines per scroll** (Settings) sets how far each scroll moves when 3 or more lines are shown — automatic (3), a fixed number, or a whole view. In 1- or 2-line mode nothing else is visible until you scroll. Headings show at the same size as the text (their bold / italics / colour stay) unless you pick "Original size" in Settings. Images aren't cut up by the line rule — they show whole, as their own step. Your reading position is remembered per document.
