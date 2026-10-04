@@ -23,6 +23,10 @@
   "build": {
     "appId": "com.lecturenotes.app",
     "productName": "Lecture Notes",
+    "npmRebuild": false,
+    "asarUnpack": [
+      "node_modules/uiohook-napi/**"
+    ],
     "files": [
       "main.js",
       "preload.js",
