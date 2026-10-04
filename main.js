@@ -13,6 +13,8 @@ app.setAppUserModelId('com.lecturenotes.app');
 const TEST_HIDDEN = !app.isPackaged && process.env.LN_TEST_HIDDEN === '1';
 const TEST_OFFSET = TEST_HIDDEN ? -30000 : 0;
 if (TEST_HIDDEN) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+// Tests can opt in to real global shortcuts (use keys the user's own copy doesn't hold).
+const SHORTCUTS_ON = !TEST_HIDDEN || process.env.LN_TEST_SHORTCUTS === '1';
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
@@ -230,51 +232,85 @@ function setMode(mode) {
   win.setBounds(boundsFor(mode));
   saveSettings();
   win.webContents.send('mode', mode);
+  refreshTrayMenu();
   updateWheelHook();
-  if (!TEST_HIDDEN) registerShortcuts(); // heading keys are only global in immersive mode
+  if (SHORTCUTS_ON) setTimeout(() => setOverlayShortcuts(settings.mode === 'immersive'), 0);
   if (!win.isVisible()) { mode === 'immersive' ? win.showInactive() : win.show(); }
 }
 
 /* ---------------- shortcuts ---------------- */
 const pretty = (a) => String(a).replace(/CommandOrControl|CmdOrCtrl/g, 'Ctrl').split('+').join(' + ');
 const SHORTCUT_KEYS = ['toggleShortcut', 'immersiveShortcut', 'linesShortcut', 'opacityShortcut', 'headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut'];
+// Shortcut handlers never run inside the hotkey callback itself: changing hotkey registrations
+// from within one (as a mode switch used to) froze the app when the keys were held, and
+// Windows repeats a held hotkey — so toggles act once per press (key repeat is ignored).
+const lastFired = {};
+function hotkey(key, fn, { repeat = false } = {}) {
+  return () => {
+    const now = Date.now(), prev = lastFired[key] || 0;
+    lastFired[key] = now;
+    if (!repeat && now - prev < 300) return;
+    setImmediate(fn);
+  };
+}
+function regShortcut(key, accel, fn, opts) {
+  if (!accel) return;
+  try {
+    const ok = globalShortcut.register(accel, hotkey(key, fn, opts));
+    if (!ok) shortcutErrors[key] = `${pretty(accel)} is already used by another app`;
+  } catch (e) { shortcutErrors[key] = `${pretty(accel)} is not a valid shortcut`; }
+}
+const cmd = (c) => () => { if (win && !win.isDestroyed()) win.webContents.send('cmd', c); };
 function registerShortcuts() {
   globalShortcut.unregisterAll();
   shortcutErrors = {};
-  const reg = (key, accel, fn) => {
-    if (!accel) return;
-    try {
-      const ok = globalShortcut.register(accel, fn);
-      if (!ok) shortcutErrors[key] = `${pretty(accel)} is already used by another app`;
-    } catch (e) { shortcutErrors[key] = `${pretty(accel)} is not a valid shortcut`; }
-  };
-  reg('toggleShortcut', settings.toggleShortcut, toggleVisible);
-  reg('immersiveShortcut', settings.immersiveShortcut, () => {
+  overlayKeysOn = false;
+  regShortcut('toggleShortcut', settings.toggleShortcut, toggleVisible);
+  regShortcut('immersiveShortcut', settings.immersiveShortcut, () => {
     if (!win) return;
     if (!win.isVisible()) { win.showInactive(); }
     setMode(settings.mode === 'immersive' ? 'editor' : 'immersive');
   });
-  const cmd = (c) => () => { if (win) win.webContents.send('cmd', c); };
-  reg('linesShortcut', settings.linesShortcut, cmd('cycleLines'));
-  reg('opacityShortcut', settings.opacityShortcut, cmd('cycleOpacity'));
-  // Ctrl+Alt+Up/Down mean something in lots of apps (editors, IDEs), so only take them over
-  // while the overlay is in use; in the editor the page handles them itself.
-  if (settings.mode === 'immersive') {
-    reg('headingPrevShortcut', settings.headingPrevShortcut, cmd('heading:prev'));
-    reg('headingNextShortcut', settings.headingNextShortcut, cmd('heading:next'));
-    reg('recenterShortcut', settings.recenterShortcut, recenterOverlay); // Ctrl+Alt+0 is "Normal text" in the editor
+  regShortcut('linesShortcut', settings.linesShortcut, cmd('cycleLines'));
+  regShortcut('opacityShortcut', settings.opacityShortcut, cmd('cycleOpacity'));
+  setOverlayShortcuts(settings.mode === 'immersive', false);
+  sendShortcutErrors();
+}
+// Ctrl+Alt+Up/Down/0 mean something in lots of apps (and Ctrl+Alt+0 is "Normal text" in the
+// editor), so they're only taken over while the overlay is in use. Only these keys are
+// (un)registered on a mode switch — the rest stay put.
+const OVERLAY_KEYS = ['headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut'];
+let overlayKeysOn = false;
+function setOverlayShortcuts(on, notify = true) {
+  if (on === overlayKeysOn) return;
+  overlayKeysOn = on;
+  if (on) {
+    regShortcut('headingPrevShortcut', settings.headingPrevShortcut, cmd('heading:prev'), { repeat: true });
+    regShortcut('headingNextShortcut', settings.headingNextShortcut, cmd('heading:next'), { repeat: true });
+    regShortcut('recenterShortcut', settings.recenterShortcut, recenterOverlay);
+  } else {
+    for (const k of OVERLAY_KEYS) {
+      try { if (settings[k] && globalShortcut.isRegistered(settings[k])) globalShortcut.unregister(settings[k]); } catch {}
+      delete shortcutErrors[k];
+    }
   }
+  if (notify) sendShortcutErrors();
+}
+function sendShortcutErrors() {
   if (win && !win.isDestroyed()) win.webContents.send('shortcut-errors', shortcutErrors);
 }
 
 /* ---------------- scroll from anywhere (immersive) ---------------- */
 // Holding a modifier (Alt by default) while scrolling over any app moves the immersive view.
 // Electron can't see wheel events outside its windows, so this uses a system-wide input hook
-// (uiohook-napi) that only runs while immersive mode is on.
+// (uiohook-napi). It starts the first time the overlay is used and then stays running (events
+// are ignored outside immersive mode) — stopping and restarting it on every mode switch was
+// needless churn in a native module. It's only stopped if the feature is turned off.
 const WHEEL_MODS = { alt: ['alt'], 'ctrl+alt': ['ctrl', 'alt'], 'shift+alt': ['shift', 'alt'], 'ctrl+shift': ['ctrl', 'shift'] };
 let hook = null, hookOn = false, altMasked = false;
 function updateWheelHook() {
-  const want = !TEST_HIDDEN && settings.mode === 'immersive' && !!WHEEL_MODS[settings.anywhereScroll];
+  const enabled = (!TEST_HIDDEN || process.env.LN_TEST_HOOK === '1') && !!WHEEL_MODS[settings.anywhereScroll];
+  const want = enabled && (hookOn || settings.mode === 'immersive');
   if (want === hookOn) return;
   try {
     if (!hook) {
@@ -336,9 +372,10 @@ function refreshTrayMenu() {
 // when it quits. An update that's ready within a minute of launch is installed right away,
 // so closing and reopening the app is enough to get the latest version.
 function sendUpdate(status) {
+  const changed = status.state !== updateStatus.state || status.version !== updateStatus.version;
   updateStatus = status;
   if (win && !win.isDestroyed()) win.webContents.send('update-status', status);
-  refreshTrayMenu();
+  if (changed) refreshTrayMenu(); // not on every download-progress tick
 }
 // Turn electron-updater's raw errors into something readable.
 function shortErr(e) {
@@ -537,7 +574,7 @@ function setupIpc() {
     saveSettings();
     return { ...settings, shortcutErrors };
   });
-  handle('shortcuts:pause', (paused) => { if (TEST_HIDDEN) return; if (paused) globalShortcut.unregisterAll(); else registerShortcuts(); });
+  handle('shortcuts:pause', (paused) => { if (!SHORTCUTS_ON) return; if (paused) globalShortcut.unregisterAll(); else registerShortcuts(); });
 
   handle('win:getBounds', () => win.getBounds());
   handle('win:setBounds', (b) => {
@@ -751,7 +788,8 @@ app.whenReady().then(async () => {
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!settings.launchAtStartup });
   setupIpc();
   createWindow();
-  if (!TEST_HIDDEN) { createTray(); registerShortcuts(); }
+  if (!TEST_HIDDEN) createTray();
+  if (SHORTCUTS_ON) registerShortcuts();
   setupUpdater();
   updateWheelHook();
 });

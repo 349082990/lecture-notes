@@ -23,3 +23,10 @@ Source lives in the private `lecture-notes` repo; only installers go to the publ
   notes aren't touched) AND `LN_TEST_HIDDEN=1`, which parks the window off-screen with no taskbar entry,
   tray icon or global shortcuts — otherwise the user sees a second copy of the app. Drive it with
   `--remote-debugging-port` + CDP (Runtime.evaluate, Page.captureScreenshot).
+  Extra dev-only switches: `LN_TEST_HOOK=1` turns the Alt+scroll input hook on in test mode;
+  `LN_TEST_SHORTCUTS=1` registers real global shortcuts — only use it with a settings.json whose
+  shortcuts are keys the user's copy doesn't hold (e.g. Ctrl+Alt+Shift+F5–F11). Synthetic keys can
+  be sent with uiohook-napi's keyToggle; ALWAYS release them in a finally/exit handler.
+- Never change global-shortcut registrations from inside a shortcut's own callback (it froze the
+  app when the keys were held); handlers go through `hotkey()` in main.js, which defers them and
+  ignores Windows key-repeat.

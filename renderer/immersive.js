@@ -263,6 +263,13 @@ window.Immersive = (function () {
     render();
     return true;
   }
+  // Enter the overlay with a document in one go: one measure + one resize. (Activating first
+  // and loading afterwards laid out the previous document's text, then this one — visible flicker.)
+  function open(html, startLine, o) {
+    if (o) { Object.assign(opts, o); if (o.maxH) maxH = o.maxH; }
+    active = true;
+    load(html, startLine);
+  }
   function home() { start = 0; render(); }
   function end() { start = lines.length - 1; if (chunks) start = chunks[chunks.length - 1].s; render(); }
 
@@ -284,7 +291,7 @@ window.Immersive = (function () {
   }).observe(card);
 
   return {
-    load, setOptions, go, home, end, jumpHeading,
+    load, open, setOptions, go, home, end, jumpHeading,
     relayout: () => queueMeasure(),
     setActive(v) { active = v; if (v) { lastWidth = 0; measureAndRender(true); } },
     onPosition(fn) { onChange = fn; },

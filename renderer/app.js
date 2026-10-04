@@ -67,6 +67,8 @@
   /* ---------------- settings ---------------- */
   let S = await api.call("settings:get");
   let fullscreen = false;
+  let lastImmOpts = "";
+  let refreshingSettings = false;
   const SHORTCUT_KEYS = ["toggleShortcut", "immersiveShortcut", "linesShortcut", "opacityShortcut", "headingPrevShortcut", "headingNextShortcut", "recenterShortcut"];
   let update = { state: "idle" };
   const IMM_PAD = {
@@ -132,7 +134,12 @@
       size: S.defaultFontSize,
       ls: S.defaultLineSpacing,
     };
-    if (S.mode === "immersive") Immersive.setOptions(immOpts());
+    // Only re-lay-out the overlay when one of its options changed — not on every save of the
+    // reading position (that used to re-measure the whole document after each scroll).
+    const io = JSON.stringify(immOpts());
+    if (S.mode === "immersive" && io !== lastImmOpts) Immersive.setOptions(immOpts());
+    lastImmOpts = io;
+    refreshOpenSettings();
     applyZoom();
   }
   const saveSettingsSoon = debounce(
@@ -164,6 +171,17 @@
     return [...new Set([1, 2, c, 25])].sort((a, b) => a - b);
   }
   // Overlay opacity steps 100 → 75 → 50 → 25% → back to 100%.
+  // Keep an open Settings dialog in step when a shortcut or menu changes a value.
+  function refreshOpenSettings() {
+    const dlg = document.getElementById("dlg-settings");
+    if (!dlg || dlg.hidden || refreshingSettings) return;
+    refreshingSettings = true;
+    try {
+      fillSettings();
+    } finally {
+      refreshingSettings = false;
+    }
+  }
   function cycleOpacity() {
     const cur = +S.overlayOpacity || 1;
     const next = [0.75, 0.5, 0.25].find((v) => v < cur - 0.01) || 1;
@@ -2217,13 +2235,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
 
   /* ---------------- immersive ---------------- */
   async function loadImmersive() {
+    const o = immOpts();
     try {
-      const wa = await api.call("win:workArea");
-      Immersive.setOptions({ maxH: wa.height - 24 });
+      o.maxH = (await api.call("win:workArea")).height - 24;
     } catch {}
-    Immersive.setActive(true);
-    Immersive.setOptions(immOpts());
-    Immersive.load(serialize(), (S.readPositions || {})[cur.rel] || 0);
+    if (S.mode !== "immersive") return; // switched back while waiting
+    lastImmOpts = JSON.stringify(immOpts());
+    Immersive.open(serialize(), (S.readPositions || {})[cur.rel] || 0, o);
   }
   Immersive.onPosition(
     debounce((line) => {
@@ -2468,7 +2486,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     $('select[data-setting="anywhereScroll"]').value = S.anywhereScroll || "off";
     fillLines();
     $$(".k[data-accel]").forEach((k) => (k.textContent = prettyAccel(S[k.dataset.accel])));
-    $$(".shortcut").forEach(
+    $$(".shortcut:not(.rec)").forEach(
       (i) => (i.value = prettyAccel(S[i.dataset.setting])),
     );
     $("#set-folder").textContent = S.docsFolder;
