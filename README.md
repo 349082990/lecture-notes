@@ -21,6 +21,7 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 | **Ctrl + Alt + M** | Immersive: switch lines shown (1 → 2 → custom → 25) — works from any app (changeable) |
 | **Ctrl + Alt + O** | Overlay opacity 100 → 75 → 50 → 25% — works from any app (changeable) |
 | **Ctrl + Alt + ↑ / ↓** | Previous / next heading — the overlay jumps there, the editor scrolls there (changeable; only taken from other apps while the overlay is showing) |
+| **Ctrl + Alt + 0** | Immersive: move the overlay back to the top middle of the screen, same width (changeable; in the editor it's still Normal text) |
 | **Alt + scroll** (anywhere) | Immersive: scroll the overlay while your mouse is over any other app (modifier changeable, or off) |
 | Scroll / ↓ / Space / Enter | Immersive: next line(s) |
 | ↑ / Backspace | Immersive: previous line(s) |

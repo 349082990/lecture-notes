@@ -25,6 +25,7 @@ const DEFAULTS = {
   opacityShortcut: 'CommandOrControl+Alt+O', // overlay opacity 100 → 75 → 50 → 25%
   headingPrevShortcut: 'CommandOrControl+Alt+Up',   // global only while the overlay shows
   headingNextShortcut: 'CommandOrControl+Alt+Down',
+  recenterShortcut: 'CommandOrControl+Alt+0',       // overlay back to top-middle; global only while the overlay shows
   immersiveHeadings: 'flat',             // flat (same size as text) | original
   anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
   docsFolder: path.join(app.getPath('documents'), 'Lecture Notes'),
@@ -206,6 +207,19 @@ function setFullscreen(on) {
   win.webContents.send('fullscreen', on);
 }
 
+// Put the overlay back at the top middle of its screen, keeping its width.
+function recenterOverlay() {
+  if (!win || win.isDestroyed() || settings.mode !== 'immersive') return;
+  const b = win.getBounds();
+  const real = { ...b, x: b.x - TEST_OFFSET };
+  const wa = (onScreen(real) ? screen.getDisplayMatching(real) : screen.getPrimaryDisplay()).workArea;
+  const width = Math.min(b.width, wa.width);
+  win.setBounds({ x: wa.x + Math.round((wa.width - width) / 2) + TEST_OFFSET, y: wa.y + 24, width, height: b.height });
+  settings.immersiveBounds = win.getBounds();
+  saveSettings();
+  if (!win.isVisible() && !TEST_HIDDEN) win.showInactive();
+}
+
 function setMode(mode) {
   if (!win || (mode !== 'editor' && mode !== 'immersive')) return;
   if (fullBounds) setFullscreen(false);
@@ -223,7 +237,7 @@ function setMode(mode) {
 
 /* ---------------- shortcuts ---------------- */
 const pretty = (a) => String(a).replace(/CommandOrControl|CmdOrCtrl/g, 'Ctrl').split('+').join(' + ');
-const SHORTCUT_KEYS = ['toggleShortcut', 'immersiveShortcut', 'linesShortcut', 'opacityShortcut', 'headingPrevShortcut', 'headingNextShortcut'];
+const SHORTCUT_KEYS = ['toggleShortcut', 'immersiveShortcut', 'linesShortcut', 'opacityShortcut', 'headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut'];
 function registerShortcuts() {
   globalShortcut.unregisterAll();
   shortcutErrors = {};
@@ -248,6 +262,7 @@ function registerShortcuts() {
   if (settings.mode === 'immersive') {
     reg('headingPrevShortcut', settings.headingPrevShortcut, cmd('heading:prev'));
     reg('headingNextShortcut', settings.headingNextShortcut, cmd('heading:next'));
+    reg('recenterShortcut', settings.recenterShortcut, recenterOverlay); // Ctrl+Alt+0 is "Normal text" in the editor
   }
   if (win && !win.isDestroyed()) win.webContents.send('shortcut-errors', shortcutErrors);
 }
@@ -529,6 +544,7 @@ function setupIpc() {
   handle('win:quit', () => { quitting = true; app.quit(); });
   handle('win:setMode', (m) => { setMode(m); refreshTrayMenu(); });
   handle('win:fullscreen', (on) => setFullscreen(on));
+  handle('win:recenter', () => recenterOverlay());
 
   handle('update:status', () => updateStatus);
   handle('update:check', () => checkForUpdates());

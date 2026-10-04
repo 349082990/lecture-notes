@@ -67,7 +67,7 @@
   /* ---------------- settings ---------------- */
   let S = await api.call("settings:get");
   let fullscreen = false;
-  const SHORTCUT_KEYS = ["toggleShortcut", "immersiveShortcut", "linesShortcut", "opacityShortcut", "headingPrevShortcut", "headingNextShortcut"];
+  const SHORTCUT_KEYS = ["toggleShortcut", "immersiveShortcut", "linesShortcut", "opacityShortcut", "headingPrevShortcut", "headingNextShortcut", "recenterShortcut"];
   let update = { state: "idle" };
   const IMM_PAD = {
     none: [4, 3],
@@ -2544,6 +2544,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       opacityShortcut: "CommandOrControl+Alt+O",
       headingPrevShortcut: "CommandOrControl+Alt+Up",
       headingNextShortcut: "CommandOrControl+Alt+Down",
+      recenterShortcut: "CommandOrControl+Alt+0",
       anywhereScroll: "alt",
     }).then(fillSettings);
 
@@ -2731,6 +2732,10 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       if (matchesAccel(e, S.opacityShortcut)) {
         e.preventDefault();
         return cycleOpacity();
+      }
+      if (matchesAccel(e, S.recenterShortcut)) {
+        e.preventDefault();
+        return api.call("win:recenter");
       }
       if (
         ["ArrowDown", "ArrowRight", "PageDown", " ", "j", "Enter"].includes(k)
