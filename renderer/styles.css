@@ -516,3 +516,4 @@ body.mode-immersive .rz[data-edge="e"], body.mode-immersive .rz[data-edge="w"] {
 .key-chip .x:hover { opacity: 1; background: var(--hover); }
 .key-add, .key-reset { color: var(--muted); font-family: var(--ui); font-size: 14px; min-width: 26px; justify-content: center; }
 .key-chip.rec, .key-add.rec { outline: 2px solid var(--accent); color: var(--text); font: 12px var(--ui); }
+.modal:focus { outline: none; }

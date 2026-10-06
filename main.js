@@ -329,7 +329,7 @@ function hotkey(key, fn, { repeat = false } = {}) {
   return () => {
     const now = Date.now(), prev = lastFired[key] || 0;
     lastFired[key] = now;
-    if (!repeat && now - prev < 300) return;
+    if (!repeat && now - prev < 120) return; // a held key repeats every ~33 ms; quick presses are slower
     setImmediate(fn);
   };
 }
@@ -948,9 +948,7 @@ function setupIpc() {
     shell.showItemInFolder(r.filePath);
     return r.filePath;
   });
-  handle('print', async (title, body, pageCss) => {
-    await renderOffscreen(title, body, pageCss, (wc) => new Promise((res) => wc.print({}, () => res())));
-  });
+  handle('print', (title, body, pageCss) => printDoc(title, body, pageCss));
 
   handle('image:inline', async (src) => {
     // Turns a remote (Google Docs) or local temp (Word) image into a data URI so it survives.
@@ -1003,6 +1001,36 @@ function setupIpc() {
     if (['cut', 'copy', 'paste', 'selectAll', 'pasteAndMatchStyle'].includes(action)) wc[action]();
   });
   handle('open:external', (url) => { if (/^(https?|mailto):/i.test(url)) shell.openExternal(url); });
+}
+
+// Printing needs a window that's really on screen: from a hidden one Windows never shows the print
+// dialog (that's why Print used to do nothing). So the document opens in a print preview window,
+// the Windows print dialog appears over it, and the preview closes when you print or cancel.
+let printWin = null;
+async function printDoc(title, body, pageCss) {
+  if (printWin && !printWin.isDestroyed()) { printWin.focus(); return { ok: false, why: 'busy' }; }
+  const tmp = path.join(app.getPath('temp'), `interview-notes-print-${Date.now()}.html`);
+  const preview = '@media screen{html{background:#e8eaed}body{background:#fff;width:8.5in;box-sizing:border-box;' +
+    'padding:1in;margin:16px auto;box-shadow:0 1px 3px rgba(0,0,0,.25)}}';
+  await fsp.writeFile(tmp, wrapHtml(title, `<style>${pageCss}${preview}</style>` + body));
+  if (TEST_HIDDEN) { testLog('print ' + title); fsp.unlink(tmp).catch(() => {}); return { ok: true, test: true }; }
+  const wa = screen.getDisplayMatching(win.getBounds()).workArea;
+  printWin = new BrowserWindow({
+    width: Math.min(900, wa.width - 40), height: Math.min(1000, wa.height - 40), show: false, center: true,
+    title: `Print — ${title}`, icon: path.join(__dirname, 'build', 'icon.png'), backgroundColor: '#e8eaed',
+    autoHideMenuBar: true, webPreferences: { javascript: false }
+  });
+  printWin.setMenu(null);
+  try {
+    await printWin.loadURL(pathToFileURL(tmp).href);
+    printWin.show();
+    printWin.focus();
+    return await new Promise((res) => printWin.webContents.print({}, (ok, why) => res({ ok, why: why || '' })));
+  } finally {
+    if (printWin && !printWin.isDestroyed()) printWin.destroy();
+    printWin = null;
+    fsp.unlink(tmp).catch(() => {});
+  }
 }
 
 async function renderOffscreen(title, body, pageCss, fn) {

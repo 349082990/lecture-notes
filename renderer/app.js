@@ -129,7 +129,12 @@
   const MAX_PT = 10; // no text, headings included, is ever bigger than this
   const SIZES = [6, 7, 8, 9, 10];
 
-  function applySettings() {
+  // `changed`: the settings that just changed (none = all of them, at start-up). Everything here is
+  // cheap except re-measuring the pages and refreshing the open Settings dialog, which only happen
+  // when something they depend on changed — so dragging a slider applies instantly.
+  const LAYOUT_KEYS = ["editorMargins", "defaultFont", "defaultFontSize", "defaultLineSpacing"];
+  function applySettings(changed) {
+    const has = (keys) => !changed || keys.some((k) => changed.includes(k));
     const r = document.documentElement.style;
     r.setProperty("--overlay-opacity", S.overlayOpacity);
     r.setProperty("--bg-opacity", S.backgroundOpacity);
@@ -164,17 +169,24 @@
     const io = JSON.stringify(immOpts());
     if (S.mode === "immersive" && io !== lastImmOpts) Immersive.setOptions(immOpts());
     lastImmOpts = io;
-    refreshOpenSettings();
-    applyZoom();
-    editor.ln.paginate(); // margins, font or spacing may have changed
+    refreshOpenSettings(changed);
+    if (has(["sidebarOpen"])) applyZoom();
+    if (has(LAYOUT_KEYS)) editor.ln.paginate();
   }
-  const saveSettingsSoon = debounce(
-    (patch) => api.call("settings:set", patch).catch(() => {}),
-    300,
-  );
+  // Settings changed in quick succession are saved together (none of them lost).
+  let pendingSettings = {};
+  const flushSettings = debounce(() => {
+    const patch = pendingSettings;
+    pendingSettings = {};
+    api.call("settings:set", patch).catch(() => {});
+  }, 300);
+  function saveSettingsSoon(patch) {
+    Object.assign(pendingSettings, patch);
+    flushSettings();
+  }
   async function setSetting(patch, quiet) {
     Object.assign(S, patch);
-    applySettings();
+    applySettings(Object.keys(patch));
     if ("keys" in patch) rebuildKeys();
     if (quiet) {
       saveSettingsSoon(patch);
@@ -199,12 +211,13 @@
   }
   // Overlay opacity steps 100 → 80 → 60 → 40 → 20% → back to 100%.
   // Keep an open Settings dialog in step when a shortcut or menu changes a value.
-  function refreshOpenSettings() {
+  function refreshOpenSettings(changed) {
     const dlg = document.getElementById("dlg-settings");
     if (!dlg || dlg.hidden || refreshingSettings) return;
     refreshingSettings = true;
     try {
-      fillSettings();
+      const previews = !changed || ["theme", "darkStyle", "editorPage"].some((k) => changed.includes(k));
+      fillSettings({ previews, keyRows: !changed });
     } finally {
       refreshingSettings = false;
     }
@@ -1220,10 +1233,18 @@
     $$(".modal", back).forEach((m) => (m.hidden = m.id !== id));
     back.hidden = false;
     hidePopover();
+    // keys go to the dialog (Esc closes it), not to the document behind it
+    const m = document.getElementById(id);
+    m.tabIndex = -1;
+    m.focus({ preventScroll: true });
   }
   function closeDialog() {
+    const wasOpen = !back.hidden;
     back.hidden = true;
     $$(".modal", back).forEach((m) => (m.hidden = true));
+    // typing carries on in the document (focus was inside the dialog, which is now hidden)
+    if (wasOpen && S.mode === "editor" && (!document.activeElement || document.activeElement === document.body || back.contains(document.activeElement)))
+      editor.commands.focus(null, { scrollIntoView: false });
     if (dialogResolve) {
       dialogResolve(null);
       dialogResolve = null;
@@ -2024,9 +2045,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return cur.rel && deleteItem(cur.rel, false);
       case "reveal":
         return api.call("docs:openFolder", dirOf(cur.rel));
-      case "print":
+      case "print": {
         await saveNow();
-        return safeCall("print", baseName(cur.rel), exportHtml(), pageCss());
+        const r = await safeCall("print", baseName(cur.rel), exportHtml(), pageCss());
+        if (r && !r.ok && r.why && !/cancel/i.test(r.why) && r.why !== "busy")
+          toast(`Couldn't print (${r.why}). Try Download as PDF instead.`, 6000);
+        return;
+      }
       case "hide":
         await saveNow();
         return api.call("win:hide");
@@ -2415,8 +2440,9 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     });
   }
 
-  function fillSettings() {
-    renderPreviews();
+  // previews: redraw the appearance mock-ups; keyRows: redraw the shortcut list (both slow-ish)
+  function fillSettings({ previews = true, keyRows = true } = {}) {
+    if (previews) renderPreviews();
     $$(".seg[data-setting], .pv-group[data-setting]").forEach((seg) => {
       const v = String(S[seg.dataset.setting]);
       $$("button", seg).forEach((b) =>
@@ -2449,7 +2475,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     $$(".shortcut:not(.rec)").forEach(
       (i) => (i.value = prettyAccel(S[i.dataset.setting])),
     );
-    if (!keyRecorder) renderKeyRows();
+    if (keyRows && !keyRecorder) renderKeyRows();
     $("#set-folder").textContent = S.docsFolder;
     $("#set-folder").title = S.docsFolder;
     $("#set-version").textContent = `Interview Notes ${S.version || ""}`;
@@ -2488,7 +2514,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       const b = e.target.closest("button");
       if (!b) return;
       const v = "num" in seg.dataset ? +b.dataset.v : b.dataset.v;
-      setSetting({ [seg.dataset.setting]: v }).then(fillSettings);
+      setSetting({ [seg.dataset.setting]: v }); // the dialog updates straight away
     }),
   );
   $$("input[type=range][data-setting]").forEach((r) =>
@@ -2730,7 +2756,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     ["File", "new", "New document", [C + "N"]],
     ["File", "docs", "Document list", [C + "O"]],
     ["File", "save", "Save now", [C + "S"]],
-    ["File", "print", "Print", [C + "P"]],
+    ["File", "print", "Print", [C + "P", C + "Shift+P"]],
     ["File", "export:pdf", "Download as PDF", []],
     ["File", "export:docx", "Download as Word", []],
     ["File", "settings", "Settings", [C + ","], "both"],

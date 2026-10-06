@@ -31,6 +31,7 @@ Every shortcut except copy, cut, paste, select all and Tab can be changed in **S
 | F11 | Editor: full screen on / off |
 | Ctrl + = / Ctrl + − / Ctrl + 0, or Ctrl + scroll | Editor: zoom in / out / back to 100% |
 | Ctrl + N / Ctrl + O | New document / document list |
+| Ctrl + P or Ctrl + Shift + P | Print (a preview opens with the Windows print dialog) |
 | Ctrl + F / Ctrl + H | Find / Find and replace |
 | Ctrl + K | Link |
 | Ctrl + Shift + V | Paste without formatting |
