@@ -2654,17 +2654,6 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     openDialog("dlg-settings");
   }
   $("#btn-settings").onclick = openSettings;
-  $("#btn-export").onclick = async () => {
-    const r = $("#btn-export").getBoundingClientRect();
-    const id = await api.call("menu:popup", [
-      { id: "print", label: "Print…", accel: acc("print") },
-      { type: "separator" },
-      { id: "export:pdf", label: "Download as PDF (.pdf)" },
-      { id: "export:docx", label: "Download as Word (.docx)" },
-      { id: "export:html", label: "Download as web page (.html)" },
-    ], Math.round(r.left), Math.round(r.bottom + 2));
-    if (id) run(id);
-  };
   $("#btn-hide").onclick = () => run("hide");
   $("#btn-close").onclick = () => run("quit");
   $$(".seg[data-setting], .pv-group[data-setting]").forEach((seg) =>
