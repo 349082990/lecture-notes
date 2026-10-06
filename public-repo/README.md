@@ -29,7 +29,7 @@ You can also check from **Settings → Updates** or **Tools → Check for update
 | **Ctrl + ]** | Show / hide the app, from any app |
 | **Ctrl + Alt + I** | Switch between the editor and the overlay |
 | **Ctrl + Alt + ↑ / ↓** or **Ctrl + Alt + scroll** | Previous / next heading |
-| **Alt + scroll** (over any app) | Scroll the overlay |
+| **Alt + scroll** (over any app) or **Alt + ↑ / ↓** | Scroll the overlay |
 | **Ctrl + Alt + M** | Overlay: 1 line → 2 lines → custom → up to 25 |
 | **Ctrl + Alt + O** | Overlay opacity |
 | **Ctrl + Alt + 0** | Move the overlay back to the top of the screen |

@@ -2562,6 +2562,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       headingPrevShortcut: "CommandOrControl+Alt+Up",
       headingNextShortcut: "CommandOrControl+Alt+Down",
       recenterShortcut: "CommandOrControl+Alt+0",
+      scrollUpShortcut: "Alt+Up",
+      scrollDownShortcut: "Alt+Down",
       anywhereScroll: "alt",
       headingScroll: "ctrl+alt",
       keys: {},
@@ -2823,6 +2825,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     ["headingPrevShortcut", "Previous heading", "both"],
     ["headingNextShortcut", "Next heading", "both"],
     ["recenterShortcut", "Recenter the overlay", "overlay"],
+    ["scrollUpShortcut", "Scroll the overlay up", "overlay"],
+    ["scrollDownShortcut", "Scroll the overlay down", "overlay"],
   ];
   // kept for typing and the clipboard — never offered as a shortcut
   const RESERVED = {
@@ -2931,6 +2935,9 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       if (matchesAccel(e, S.recenterShortcut)) {
         e.preventDefault();
         api.call("win:recenter");
+      } else if (matchesAccel(e, S.scrollUpShortcut) || matchesAccel(e, S.scrollDownShortcut)) {
+        e.preventDefault(); // (normally taken by the main process before it gets here)
+        Immersive.go(matchesAccel(e, S.scrollUpShortcut) ? -1 : 1);
       }
       return;
     }

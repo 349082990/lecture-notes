@@ -24,6 +24,7 @@ Every shortcut except copy, cut, paste, select all and Tab can be changed in **S
 | **Ctrl + Alt + ↑ / ↓** | Previous / next heading — the overlay puts that heading on its first line (blank lines below it near the end of the document), the editor scrolls there (changeable; only taken from other apps while the overlay is showing) |
 | **Ctrl + Alt + 0** | Immersive: move the overlay to the very top of the screen, centred, same width (changeable; in the editor it's still Normal text) |
 | **Alt + scroll** (anywhere) | Immersive: scroll the overlay while your mouse is over any other app (modifier changeable, or off) |
+| **Alt + ↑ / ↓** (anywhere) | Immersive: same as Alt + scroll, from the keyboard; hold to keep scrolling (changeable; only taken from other apps while the overlay is showing) |
 | Scroll / ↓ / Space / Enter | Immersive: next line(s) |
 | ↑ / Backspace | Immersive: previous line(s) |
 | Ctrl + scroll, or A− / A+ | Immersive: text size |

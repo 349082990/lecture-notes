@@ -34,6 +34,8 @@ const DEFAULTS = {
   headingPrevShortcut: 'CommandOrControl+Alt+Up',   // global only while the overlay shows
   headingNextShortcut: 'CommandOrControl+Alt+Down',
   recenterShortcut: 'CommandOrControl+Alt+0',       // overlay back to the top of the screen, centred; global only while the overlay shows
+  scrollUpShortcut: 'Alt+Up',            // scroll the overlay from any app, like Alt + scroll; global only while the overlay shows
+  scrollDownShortcut: 'Alt+Down',
   keys: {},                              // in-app shortcuts changed in Settings: { command: [accelerators] }
   immersiveHeadings: 'flat',             // flat (same size as text) | original
   anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
@@ -320,7 +322,7 @@ function setMode(mode) {
 
 /* ---------------- shortcuts ---------------- */
 const pretty = (a) => String(a).replace(/CommandOrControl|CmdOrCtrl/g, 'Ctrl').split('+').join(' + ');
-const SHORTCUT_KEYS = ['toggleShortcut', 'immersiveShortcut', 'linesShortcut', 'opacityShortcut', 'headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut'];
+const SHORTCUT_KEYS = ['toggleShortcut', 'immersiveShortcut', 'linesShortcut', 'opacityShortcut', 'headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut', 'scrollUpShortcut', 'scrollDownShortcut'];
 // Shortcut handlers never run inside the hotkey callback itself: changing hotkey registrations
 // from within one (as a mode switch used to) froze the app when the keys were held, and
 // Windows repeats a held hotkey — so toggles act once per press (key repeat is ignored).
@@ -359,7 +361,7 @@ function registerShortcuts() {
 // Ctrl+Alt+Up/Down/0 mean something in lots of apps (and Ctrl+Alt+0 is "Normal text" in the
 // editor), so they're only taken over while the overlay is in use. Only these keys are
 // (un)registered on a mode switch — the rest stay put.
-const OVERLAY_KEYS = ['headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut'];
+const OVERLAY_KEYS = ['headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut', 'scrollUpShortcut', 'scrollDownShortcut'];
 let overlayKeysOn = false;
 function setOverlayShortcuts(on, notify = true) {
   if (on === overlayKeysOn) return;
@@ -368,6 +370,9 @@ function setOverlayShortcuts(on, notify = true) {
     regShortcut('headingPrevShortcut', settings.headingPrevShortcut, cmd('heading:prev'), { repeat: true });
     regShortcut('headingNextShortcut', settings.headingNextShortcut, cmd('heading:next'), { repeat: true });
     regShortcut('recenterShortcut', settings.recenterShortcut, recenterOverlay);
+    // Alt + ↑ / ↓: the overlay scrolls a step, same as Alt + scroll (held down, it keeps going)
+    regShortcut('scrollUpShortcut', settings.scrollUpShortcut, overlayScroll(settings.scrollUpShortcut, -1), { repeat: true });
+    regShortcut('scrollDownShortcut', settings.scrollDownShortcut, overlayScroll(settings.scrollDownShortcut, 1), { repeat: true });
   } else {
     for (const k of OVERLAY_KEYS) {
       try { if (settings[k] && globalShortcut.isRegistered(settings[k])) globalShortcut.unregister(settings[k]); } catch {}
@@ -375,6 +380,25 @@ function setOverlayShortcuts(on, notify = true) {
     }
   }
   if (notify) sendShortcutErrors();
+}
+function overlayScroll(accel, dir) {
+  return () => {
+    if (!win || win.isDestroyed() || settings.mode !== 'immersive') return;
+    if (/(^|\+)Alt(\+|$)/.test(accel || '')) maskAlt();
+    win.webContents.send('imm-scroll', dir, 1);
+  };
+}
+// Releasing Alt after a shortcut the other app never saw makes it open its menu bar (Explorer,
+// Office, …); a harmless F24 tap in between stops that. Once per Alt press is enough.
+let lastAltMask = 0;
+function maskAlt() {
+  const now = Date.now();
+  if (now - lastAltMask < 400 || TEST_HIDDEN) { lastAltMask = now; return; }
+  lastAltMask = now;
+  try {
+    const h = hook || require('uiohook-napi');
+    h.uIOhook.keyTap(h.UiohookKey.F24);
+  } catch {}
 }
 function sendShortcutErrors() {
   if (win && !win.isDestroyed()) win.webContents.send('shortcut-errors', shortcutErrors);
