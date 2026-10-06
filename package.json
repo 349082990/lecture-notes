@@ -1,6 +1,6 @@
 {
   "name": "interview-notes",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Interview Notes — a notes editor with an always-on-top reading overlay",
   "main": "main.js",
   "scripts": {
