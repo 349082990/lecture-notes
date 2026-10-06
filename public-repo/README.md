@@ -37,7 +37,7 @@ You can also check from **Settings → Updates** or **Tools → Check for update
 | **Tab / Shift + Tab** | Indent / outdent a bullet |
 | **Ctrl + Q** | Quit |
 
-Every shortcut, including bold, headings, zoom and the overlay keys, can be changed in **Settings → Keyboard shortcuts** (the sliders icon at the top right).
+Every shortcut, including bold, headings, zoom and the overlay keys, can be changed in **Settings → Keyboard shortcuts** (the sliders icon at the top right). Only copy, cut, paste, select all and Tab stay fixed.
 
 ## Your notes stay on your PC
 

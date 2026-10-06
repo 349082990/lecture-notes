@@ -12,7 +12,7 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 
 ## Shortcuts
 
-Every shortcut can be changed in **Settings → Keyboard shortcuts**: click a shortcut and press new keys, × removes one, + adds another, ↺ puts back the default. These are the defaults:
+Every shortcut except copy, cut, paste, select all and Tab can be changed in **Settings → Keyboard shortcuts**: click a shortcut and press new keys, × removes one, + adds another, ↺ puts back the default. These are the defaults:
 
 | Shortcut | What it does |
 |---|---|
