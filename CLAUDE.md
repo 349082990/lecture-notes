@@ -34,7 +34,12 @@ electron-updater can't read a private repo without shipping a token in the app.
 ## Shortcuts
 
 In-app shortcuts are the `APP_KEYS` table in app.js, dispatched by one capture-phase keydown
-listener; changed ones are saved as `settings.keys = { command: [accelerators] }`. TipTap's own
+listener; changed ones are saved as `settings.keys = { command: [accelerators] }`. Only the
+`shown` ones are listed in Settings (the user wants standard editing keys left out). Overlay
+navigation is Alt-based global shortcuts registered while the overlay shows (Alt+↑/↓, Ctrl+Alt+↑/↓
+headings, Ctrl+Alt+Home/End, Ctrl+Alt+=/−) — plain keys deliberately don't move the overlay.
+Alt+End and Alt+PageUp/Down are taken by another program on the user's PC. Page breaks and other
+inserts come from the "@" menu in the editor (no Ctrl+Enter). TipTap's own
 keyboard shortcuts are switched off (`noKeys` in editor-src) so a removed binding really stops working.
 The from-any-app shortcuts are the separate `*Shortcut` settings, registered by main.js.
 

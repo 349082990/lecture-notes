@@ -12,7 +12,7 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 
 ## Shortcuts
 
-Every shortcut except copy, cut, paste, select all and Tab can be changed in **Settings → Keyboard shortcuts**: click a shortcut and press new keys, × removes one, + adds another, ↺ puts back the default. These are the defaults:
+The app's own shortcuts (from any app, the overlay, document list, full screen, word count) can be changed in **Settings → Keyboard shortcuts**. Standard editing keys (undo, bold, headings, print, paste, …) work as usual. Type **@** in a document for page breaks, tables, dates and more (Tab or Enter inserts).
 
 | Shortcut | What it does |
 |---|---|
@@ -25,10 +25,10 @@ Every shortcut except copy, cut, paste, select all and Tab can be changed in **S
 | **Ctrl + Alt + 0** | Immersive: move the overlay to the very top of the screen, centred, same width (changeable; in the editor it's still Normal text) |
 | **Alt + scroll** (anywhere) | Immersive: scroll the overlay while your mouse is over any other app (modifier changeable, or off) |
 | **Alt + ↑ / ↓** (anywhere) | Immersive: same as Alt + scroll, from the keyboard; hold to keep scrolling (changeable; only taken from other apps while the overlay is showing) |
-| Scroll / ↓ / Space / Enter | Immersive: next line(s) |
-| ↑ / Backspace | Immersive: previous line(s) |
-| Ctrl + scroll, or A− / A+ | Immersive: text size |
-| Esc | Immersive: back to the editor (editor: leave full screen) |
+| Scroll over the overlay | Immersive: next / previous line(s) — plain keys like ↓ or Space don't move it |
+| **Ctrl + Alt + Home / End** | Immersive: back to the start / go to the end (from any app while the overlay shows) |
+| **Ctrl + Alt + = / −**, Ctrl + scroll, or A− / A+ | Immersive: text size |
+| Esc | Immersive (when the overlay has focus): back to the editor. Editor: leave full screen |
 | F11 | Editor: full screen on / off |
 | Ctrl + = / Ctrl + − / Ctrl + 0, or Ctrl + scroll | Editor: zoom in / out / back to 100% |
 | Ctrl + N / Ctrl + O | New document / document list |
@@ -38,13 +38,13 @@ Every shortcut except copy, cut, paste, select all and Tab can be changed in **S
 | Ctrl + Shift + V | Paste without formatting |
 | Ctrl + Shift + 7 / 8 / 9 | Numbered / bulleted / checklist |
 | Tab / Shift + Tab | In a list: indent / outdent the bullet. Elsewhere: a tab |
-| Ctrl + Enter | Page break |
+| **@** then Tab | Insert: page break, date, table, lists, headings, line, image, link (e.g. type @page, press Tab) |
 | Ctrl + Alt + 0–4 | Normal text / Heading 1–4 |
 | Ctrl + Q or Alt + F4 | Quit completely (or right-click the tray icon) |
 
 ## How it works
 
-- **Editor mode** — pages like Google Docs' print layout (8.5 × 11 in, with a gap between pages; text that doesn't fit moves to the next page, and Ctrl + Enter starts a new page): fonts, sizes, bold/italic/underline/strikethrough, colours and highlight, headings, bullets/numbers/checklists, alignment, line & paragraph spacing, indent, links, images (paste, drag in, or Insert → Image; click an image to resize/align), tables (right-click a cell to add/remove rows and columns), find & replace, word count, spell check, zoom, print, and download as .docx / .pdf / .html. Defaults: Arial 10 pt, 1.15 spacing. Nothing is ever bigger than 10 pt — headings stand out by bold and colour instead, and larger pasted or older text is shrunk to 10 pt. Typing "* " or "- " at the start of a line starts a bulleted list, "1. " a numbered one. Lists work like Google Docs: Enter on an empty bullet ends the list, Backspace at the start of a bullet removes the bullet, Tab / Shift + Tab nest and un-nest.
+- **Editor mode** — pages like Google Docs' print layout (8.5 × 11 in, with a gap between pages; text that doesn't fit moves to the next page, and type @page and press Tab to start a new page): fonts, sizes, bold/italic/underline/strikethrough, colours and highlight, headings, bullets/numbers/checklists, alignment, line & paragraph spacing, indent, links, images (paste, drag in, or Insert → Image; click an image to resize/align), tables (right-click a cell to add/remove rows and columns), find & replace, word count, spell check, zoom, print, and download as .docx / .pdf / .html. Defaults: Arial 10 pt, 1.15 spacing. Nothing is ever bigger than 10 pt — headings stand out by bold and colour instead, and larger pasted or older text is shrunk to 10 pt. Typing "* " or "- " at the start of a line starts a bulleted list, "1. " a numbered one. Lists work like Google Docs: Enter on an empty bullet ends the list, Backspace at the start of a bullet removes the bullet, Tab / Shift + Tab nest and un-nest.
 - **Paste from Google Docs or Word** keeps the formatting, and images are copied into the document so they don't break later. File → Import also opens .docx files directly.
 - **Immersive mode** — no window bar or buttons, just the text on a rounded card. Drag anywhere to move it (including right up to the top edge of the screen); drag the left/right edges to change the width. The height adjusts itself to the lines being shown. It has no taskbar button — get back to it with the shortcut or the tray icon. Hover to reveal tiny controls (lines per view, text size, exit, hide).
 - **Lines per view** (Settings, the "25 / 1L / 2L" button on hover, or Ctrl + Alt + M): 1 line, 2 lines, a custom number (1–25), or default (up to 25). **Lines per scroll** (Settings) sets how far each scroll moves when 3 or more lines are shown — automatic (3), a fixed number, or a whole view. In 1- or 2-line mode nothing else is visible until you scroll. Headings show at the same size as the text (their bold / italics / colour stay) unless you pick "Original size" in Settings. Images aren't cut up by the line rule — they show whole, as their own step. Your reading position is remembered per document.

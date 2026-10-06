@@ -308,7 +308,7 @@ const Tab = Node.create({
   },
 })
 
-// Insert → Page break (Ctrl + Enter by default, like Google Docs). Everything after it starts on a new page.
+// Insert → Page break, or "@page" + Tab in the document. Everything after it starts on a new page.
 const PageBreak = Node.create({
   name: 'pageBreak',
   group: 'block',

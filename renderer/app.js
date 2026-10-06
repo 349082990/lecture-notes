@@ -1226,6 +1226,103 @@
   };
   editor.on("blur", () => setTimeout(() => { if (!editor.isFocused) hideLinkBubble(); }, 150));
 
+  /* ---------------- @ commands ---------------- */
+  // Like Google Docs: type "@" (at the start of a line or after a space) and a menu of things to
+  // insert appears — keep typing to narrow it ("@page"), then Tab or Enter inserts it.
+  const AT_COMMANDS = [
+    ["Page break", "Start a new page", () => chain().insertPageBreak().run()],
+    ["Date", "Today's date", () => run("date")],
+    ["Table", "3 × 3", () => insertTable(3, 3)],
+    ["Checklist", "", () => toggleChecklist()],
+    ["Bulleted list", "", () => toggleList("bulletList")],
+    ["Numbered list", "", () => toggleList("orderedList")],
+    ["Heading 1", "", () => setBlockStyle("h1")],
+    ["Heading 2", "", () => setBlockStyle("h2")],
+    ["Heading 3", "", () => setBlockStyle("h3")],
+    ["Horizontal line", "", () => chain().setHorizontalRule().run()],
+    ["Image", "From a file", () => run("image")],
+    ["Link", "", () => openLinkDialog()],
+  ].map(([label, hint, fn]) => ({ label, hint, fn }));
+  const atMenu = document.createElement("div");
+  atMenu.id = "at-menu";
+  atMenu.className = "popover";
+  atMenu.hidden = true;
+  document.body.appendChild(atMenu);
+  let at = null; // { from, to, items, i } while the menu is showing
+  let atDismissed = -1; // the "@" the menu was closed for with Esc
+  function atMatch() {
+    const sel = editor.state.selection;
+    if (!sel.empty || S.mode !== "editor" || !editor.isFocused) return null;
+    const $p = sel.$from;
+    if (!$p.parent.isTextblock || $p.parent.type.spec.code) return null;
+    const before = $p.parent.textBetween(Math.max(0, $p.parentOffset - 30), $p.parentOffset, "\n", "￼");
+    const m = before.match(/(?:^|\s)@([a-z0-9][a-z0-9 ]{0,24})?$/i);
+    if (!m) return null;
+    const q = (m[1] || "").toLowerCase();
+    const from = sel.from - q.length - 1;
+    if (from === atDismissed) return null;
+    const items = AT_COMMANDS.filter((c) => {
+      const l = c.label.toLowerCase();
+      return !q || l.startsWith(q.trimEnd()) || l.split(" ").some((w) => w.startsWith(q.trim()));
+    });
+    return items.length ? { from, to: sel.from, items } : null;
+  }
+  function updateAtMenu() {
+    const m = atMatch();
+    if (!m) return hideAtMenu();
+    const keep = at && at.from === m.from ? Math.min(at.i, m.items.length - 1) : 0;
+    at = { ...m, i: keep };
+    atMenu.innerHTML =
+      `<div class="pop-menu at-list">${at.items
+        .map((c, k) => `<button data-k="${k}" class="${k === at.i ? "on-row" : ""}"><span>${escHtml(c.label)}</span>${c.hint ? `<small>${escHtml(c.hint)}</small>` : ""}</button>`)
+        .join("")}</div><div class="at-foot">Tab or Enter to insert · Esc to close</div>`;
+    atMenu.hidden = false;
+    const r = editor.view.coordsAtPos(at.from);
+    const h = atMenu.offsetHeight,
+      w = atMenu.offsetWidth;
+    atMenu.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + "px";
+    atMenu.style.top = (r.bottom + 6 + h < innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + "px";
+  }
+  function hideAtMenu() {
+    at = null;
+    atMenu.hidden = true;
+  }
+  function chooseAt(k) {
+    const c = at && at.items[k];
+    if (!c) return;
+    const { from, to } = at;
+    hideAtMenu();
+    editor.chain().focus().deleteRange({ from, to }).run();
+    c.fn();
+  }
+  editor.on("transaction", () => setTimeout(updateAtMenu, 0));
+  editor.on("blur", () => setTimeout(() => !editor.isFocused && hideAtMenu(), 150));
+  canvas.addEventListener("scroll", () => at && updateAtMenu());
+  atMenu.addEventListener("mousedown", (e) => {
+    e.preventDefault(); // keep the caret in the document
+    const b = e.target.closest("[data-k]");
+    if (b) chooseAt(+b.dataset.k);
+  });
+  // runs before the editor and the shortcut handler see the key
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (!at || atMenu.hidden) return;
+      const n = at.items.length;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        at.i = (at.i + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
+        $$("[data-k]", atMenu).forEach((b) => b.classList.toggle("on-row", +b.dataset.k === at.i));
+      } else if ((e.key === "Tab" && !e.shiftKey) || e.key === "Enter") chooseAt(at.i);
+      else if (e.key === "Escape") {
+        atDismissed = at.from;
+        hideAtMenu();
+      } else return;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    true,
+  );
+
   /* ---------------- dialogs ---------------- */
   const back = $("#modal-back");
   let dialogResolve = null;
@@ -1798,7 +1895,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       { type: "separator" },
       { id: "import", label: "Import .docx / .html / .txt…" },
       { id: "print", label: "Print…", accel: acc("print") },
-      { id: "export:pdf", label: "Download as PDF", accel: acc("export:pdf") },
+      { id: "export:pdf", label: "Download as PDF" },
       {
         label: "Download as…",
         submenu: [
@@ -1908,7 +2005,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       { id: "table", label: "Table" },
       { id: "link", label: "Link", accel: acc("link") },
       { id: "hr", label: "Horizontal line" },
-      { id: "pageBreak", label: "Page break", accel: acc("pageBreak") },
+      { id: "pageBreak", label: "Page break (or type @page)" },
       { id: "date", label: "Date" },
       { id: "checklist", label: "Checklist" },
     ],
@@ -1921,7 +2018,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
           { id: "underline", label: "Underline", accel: acc("underline") },
           { id: "strikeThrough", label: "Strikethrough", accel: acc("strikeThrough") },
           { id: "superscript", label: "Superscript", accel: acc("superscript") },
-          { id: "subscript", label: "Subscript", accel: acc("subscript") },
+          { id: "subscript", label: "Subscript" },
           { type: "separator" },
           {
             id: "fontUp",
@@ -1945,7 +2042,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
           ["h2", "Heading 2", "CmdOrCtrl+Alt+2"],
           ["h3", "Heading 3", "CmdOrCtrl+Alt+3"],
           ["h4", "Heading 4", "CmdOrCtrl+Alt+4"],
-        ].map(([v, l]) => ({ id: "style:" + v, label: l, accel: acc("style:" + v) })),
+        ].map(([v, l]) => ({ id: "style:" + v, label: l, accel: acc("style:" + v) || undefined })),
       },
       {
         label: "Align & indent",
@@ -2105,6 +2202,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return cycleOpacity();
       case "heading":
         return jumpHeading(arg === "prev" ? -1 : 1);
+      case "imm": // overlay: home / end / bigger / smaller / exit
+        return S.mode === "immersive" && runKey("imm:" + arg);
       case "alwaysOnTop":
         return setSetting({ alwaysOnTop: !S.alwaysOnTop });
       case "image": {
@@ -2564,6 +2663,10 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       recenterShortcut: "CommandOrControl+Alt+0",
       scrollUpShortcut: "Alt+Up",
       scrollDownShortcut: "Alt+Down",
+      homeShortcut: "CommandOrControl+Alt+Home",
+      endShortcut: "CommandOrControl+Alt+End",
+      biggerShortcut: "CommandOrControl+Alt+=",
+      smallerShortcut: "CommandOrControl+Alt+-",
       anywhereScroll: "alt",
       headingScroll: "ctrl+alt",
       keys: {},
@@ -2754,13 +2857,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   // scope: "editor" | "overlay" | "both". repeat: keeps firing while the keys are held.
   // Changed ones are saved in S.keys as { id: [accelerators] }.
   const C = "CommandOrControl+";
+  // Standard editing keys (undo, bold, headings, print, …) work as everywhere else and aren't listed
+  // in Settings; only the app's own ones are (`shown`).
   const APP_KEYS = [
     ["File", "new", "New document", [C + "N"]],
-    ["File", "docs", "Document list", [C + "O"]],
+    ["File", "docs", "Show / hide the document list", [C + "O"], "editor", false, true],
     ["File", "save", "Save now", [C + "S"]],
     ["File", "print", "Print", [C + "P", C + "Shift+P"]],
-    ["File", "export:pdf", "Download as PDF", []],
-    ["File", "export:docx", "Download as Word", []],
     ["File", "settings", "Settings", [C + ","], "both"],
     ["File", "quit", "Quit", [C + "Q"], "both"],
     ["Edit", "undo", "Undo", [C + "Z"], "editor", true],
@@ -2768,28 +2871,20 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     ["Edit", "pastePlain", "Paste without formatting", [C + "Shift+V"]],
     ["Edit", "findOnly", "Find", [C + "F"]],
     ["Edit", "find", "Find and replace", [C + "H"]],
-    ["View", "fullscreen", "Full screen", ["F11"]],
+    ["View", "fullscreen", "Full screen", ["F11"], "editor", false, true],
     ["View", "zoom:in", "Zoom in", [C + "=", C + "Shift+=", C + "numadd"], "editor", true],
     ["View", "zoom:out", "Zoom out", [C + "-", C + "numsub"], "editor", true],
     ["View", "zoom:1", "Zoom to 100%", [C + "0", C + "num0"]],
-    ["View", "docsToggle", "Show / hide the document list", []],
     ["Insert", "link", "Link", [C + "K"]],
-    ["Insert", "pageBreak", "Page break", [C + "Enter"]],
-    ["Insert", "image", "Image", []],
-    ["Insert", "hr", "Horizontal line", []],
-    ["Insert", "date", "Today's date", []],
     ["Format", "bold", "Bold", [C + "B"]],
     ["Format", "italic", "Italic", [C + "I"]],
     ["Format", "underline", "Underline", [C + "U"]],
     ["Format", "strikeThrough", "Strikethrough", ["Alt+Shift+5"]],
     ["Format", "superscript", "Superscript", [C + "."]],
-    ["Format", "subscript", "Subscript", []],
     ["Format", "fontUp", "Bigger text", [C + "Shift+."], "editor", true],
     ["Format", "fontDown", "Smaller text", [C + "Shift+,"], "editor", true],
     ["Format", "clearFormat", "Clear formatting", [C + "\\"]],
     ["Format", "style:p", "Normal text", [C + "Alt+0"]],
-    ["Format", "style:title", "Title", []],
-    ["Format", "style:subtitle", "Subtitle", []],
     ["Format", "style:h1", "Heading 1", [C + "Alt+1"]],
     ["Format", "style:h2", "Heading 2", [C + "Alt+2"]],
     ["Format", "style:h3", "Heading 3", [C + "Alt+3"]],
@@ -2801,20 +2896,9 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     ["Format", "insertOrderedList", "Numbered list", [C + "Shift+7"]],
     ["Format", "insertUnorderedList", "Bulleted list", [C + "Shift+8"]],
     ["Format", "checklist", "Checklist", [C + "Shift+9"]],
-    ["Format", "indent", "Increase indent", []],
-    ["Format", "outdent", "Decrease indent", []],
-    ["Tools", "wordCount", "Word count", [C + "Shift+C"]],
-    ["Tools", "spell", "Spell check on / off", []],
-    ["Overlay", "imm:next", "Next line(s)", ["Down", "Right", "Space", "Enter", "J"], "overlay", true],
-    ["Overlay", "imm:prev", "Previous line(s)", ["Up", "Left", "Backspace", "K"], "overlay", true],
-    ["Overlay", "imm:nextBig", "Jump further down", ["PageDown"], "overlay", true],
-    ["Overlay", "imm:prevBig", "Jump further up", ["PageUp"], "overlay", true],
-    ["Overlay", "imm:home", "Back to the start", ["Home"], "overlay"],
-    ["Overlay", "imm:end", "Go to the end", ["End"], "overlay"],
-    ["Overlay", "imm:bigger", "Bigger text", [C + "=", C + "Shift+=", C + "numadd"], "overlay", true],
-    ["Overlay", "imm:smaller", "Smaller text", [C + "-", C + "numsub"], "overlay", true],
-    ["Overlay", "imm:exit", "Back to the editor", ["Escape"], "overlay"],
-  ].map(([group, id, label, keys, scope = "editor", repeat = false]) => ({ group, id, label, keys, scope, repeat }));
+    ["Tools", "wordCount", "Word count", [C + "Shift+C"], "editor", false, true],
+    ["Overlay", "imm:exit", "Back to the editor (when the overlay has focus)", ["Escape"], "overlay", false, true],
+  ].map(([group, id, label, keys, scope = "editor", repeat = false, shown = false]) => ({ group, id, label, keys, scope, repeat, shown }));
   const APP_KEY = Object.fromEntries(APP_KEYS.map((c) => [c.id, c]));
   // shortcuts that work from any app (main process) — and where they also apply
   const GLOBAL_KEYS = [
@@ -2827,6 +2911,10 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     ["recenterShortcut", "Recenter the overlay", "overlay"],
     ["scrollUpShortcut", "Scroll the overlay up", "overlay"],
     ["scrollDownShortcut", "Scroll the overlay down", "overlay"],
+    ["homeShortcut", "Overlay: back to the start", "overlay"],
+    ["endShortcut", "Overlay: go to the end", "overlay"],
+    ["biggerShortcut", "Overlay: bigger text", "overlay"],
+    ["smallerShortcut", "Overlay: smaller text", "overlay"],
   ];
   // kept for typing and the clipboard — never offered as a shortcut
   const RESERVED = {
@@ -2872,16 +2960,6 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return saveNow().then(() => toast("Saved", 1200));
       case "findOnly":
         return openFind(false);
-      case "docsToggle":
-        return toggleSidebar();
-      case "imm:next":
-        return Immersive.go(1);
-      case "imm:prev":
-        return Immersive.go(-1);
-      case "imm:nextBig":
-        return Immersive.go(1, true);
-      case "imm:prevBig":
-        return Immersive.go(-1, true);
       case "imm:home":
         return Immersive.home();
       case "imm:end":
@@ -2938,6 +3016,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       } else if (matchesAccel(e, S.scrollUpShortcut) || matchesAccel(e, S.scrollDownShortcut)) {
         e.preventDefault(); // (normally taken by the main process before it gets here)
         Immersive.go(matchesAccel(e, S.scrollUpShortcut) ? -1 : 1);
+      } else {
+        const c = [["homeShortcut", "imm:home"], ["endShortcut", "imm:end"], ["biggerShortcut", "imm:bigger"], ["smallerShortcut", "imm:smaller"]]
+          .find(([k]) => matchesAccel(e, S[k]));
+        if (c) {
+          e.preventDefault();
+          runKey(c[1]);
+        }
       }
       return;
     }
@@ -2969,13 +3054,15 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     let html = "";
     let group = "";
     for (const c of APP_KEYS) {
-      if (c.group !== group) {
-        group = c.group;
-        html += `<h4 class="keys-group" data-group="${group}">${group === "Overlay" ? "In the overlay" : "Editor — " + group}</h4>`;
+      if (!c.shown) continue;
+      const g = c.group === "Overlay" ? "Overlay" : "Editor";
+      if (g !== group) {
+        group = g;
+        html += `<h4 class="keys-group" data-group="${group}">${group === "Overlay" ? "In the overlay window" : "In the editor"}</h4>`;
       }
       const keys = keysFor(c.id);
       const changed = (S.keys || {})[c.id] !== undefined;
-      html += `<div class="row key-row" data-cmd="${c.id}" data-group="${c.group}"><span>${escHtml(c.label)}</span><div class="keys">${keys
+      html += `<div class="row key-row" data-cmd="${c.id}" data-group="${g}"><span>${escHtml(c.label)}</span><div class="keys">${keys
         .map((k, i) => `<button class="key-chip" data-i="${i}" title="Click to change">${escHtml(prettyAccel(k))}<i class="x" data-x="${i}" title="Remove">×</i></button>`)
         .join("")}<button class="key-add" title="Add a shortcut">+</button>${changed ? `<button class="key-reset" title="Back to the default (${escHtml(APP_KEY[c.id].keys.map(prettyAccel).join(", ") || "none")})">↺</button>` : ""}</div></div>`;
     }

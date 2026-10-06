@@ -36,6 +36,10 @@ const DEFAULTS = {
   recenterShortcut: 'CommandOrControl+Alt+0',       // overlay back to the top of the screen, centred; global only while the overlay shows
   scrollUpShortcut: 'Alt+Up',            // scroll the overlay from any app, like Alt + scroll; global only while the overlay shows
   scrollDownShortcut: 'Alt+Down',
+  homeShortcut: 'CommandOrControl+Alt+Home',  // overlay: back to the start / to the end (global only while it shows)
+  endShortcut: 'CommandOrControl+Alt+End',
+  biggerShortcut: 'CommandOrControl+Alt+=',   // overlay text size (global only while it shows)
+  smallerShortcut: 'CommandOrControl+Alt+-',
   keys: {},                              // in-app shortcuts changed in Settings: { command: [accelerators] }
   immersiveHeadings: 'flat',             // flat (same size as text) | original
   anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
@@ -322,7 +326,7 @@ function setMode(mode) {
 
 /* ---------------- shortcuts ---------------- */
 const pretty = (a) => String(a).replace(/CommandOrControl|CmdOrCtrl/g, 'Ctrl').split('+').join(' + ');
-const SHORTCUT_KEYS = ['toggleShortcut', 'immersiveShortcut', 'linesShortcut', 'opacityShortcut', 'headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut', 'scrollUpShortcut', 'scrollDownShortcut'];
+const SHORTCUT_KEYS = ['toggleShortcut', 'immersiveShortcut', 'linesShortcut', 'opacityShortcut', 'headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut', 'scrollUpShortcut', 'scrollDownShortcut', 'homeShortcut', 'endShortcut', 'biggerShortcut', 'smallerShortcut'];
 // Shortcut handlers never run inside the hotkey callback itself: changing hotkey registrations
 // from within one (as a mode switch used to) froze the app when the keys were held, and
 // Windows repeats a held hotkey — so toggles act once per press (key repeat is ignored).
@@ -361,7 +365,8 @@ function registerShortcuts() {
 // Ctrl+Alt+Up/Down/0 mean something in lots of apps (and Ctrl+Alt+0 is "Normal text" in the
 // editor), so they're only taken over while the overlay is in use. Only these keys are
 // (un)registered on a mode switch — the rest stay put.
-const OVERLAY_KEYS = ['headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut', 'scrollUpShortcut', 'scrollDownShortcut'];
+const OVERLAY_KEYS = ['headingPrevShortcut', 'headingNextShortcut', 'recenterShortcut', 'scrollUpShortcut', 'scrollDownShortcut',
+  'homeShortcut', 'endShortcut', 'biggerShortcut', 'smallerShortcut'];
 let overlayKeysOn = false;
 function setOverlayShortcuts(on, notify = true) {
   if (on === overlayKeysOn) return;
@@ -373,6 +378,10 @@ function setOverlayShortcuts(on, notify = true) {
     // Alt + ↑ / ↓: the overlay scrolls a step, same as Alt + scroll (held down, it keeps going)
     regShortcut('scrollUpShortcut', settings.scrollUpShortcut, overlayScroll(settings.scrollUpShortcut, -1), { repeat: true });
     regShortcut('scrollDownShortcut', settings.scrollDownShortcut, overlayScroll(settings.scrollDownShortcut, 1), { repeat: true });
+    regShortcut('homeShortcut', settings.homeShortcut, overlayCmd(settings.homeShortcut, 'imm:home'));
+    regShortcut('endShortcut', settings.endShortcut, overlayCmd(settings.endShortcut, 'imm:end'));
+    regShortcut('biggerShortcut', settings.biggerShortcut, overlayCmd(settings.biggerShortcut, 'imm:bigger'), { repeat: true });
+    regShortcut('smallerShortcut', settings.smallerShortcut, overlayCmd(settings.smallerShortcut, 'imm:smaller'), { repeat: true });
   } else {
     for (const k of OVERLAY_KEYS) {
       try { if (settings[k] && globalShortcut.isRegistered(settings[k])) globalShortcut.unregister(settings[k]); } catch {}
@@ -386,6 +395,13 @@ function overlayScroll(accel, dir) {
     if (!win || win.isDestroyed() || settings.mode !== 'immersive') return;
     if (/(^|\+)Alt(\+|$)/.test(accel || '')) maskAlt();
     win.webContents.send('imm-scroll', dir, 1);
+  };
+}
+function overlayCmd(accel, c) {
+  return () => {
+    if (!win || win.isDestroyed() || settings.mode !== 'immersive') return;
+    if (/(^|\+)Alt(\+|$)/.test(accel || '')) maskAlt();
+    win.webContents.send('cmd', c);
   };
 }
 // Releasing Alt after a shortcut the other app never saw makes it open its menu bar (Explorer,
@@ -791,7 +807,7 @@ async function listTree(dirAbs) {
 }
 
 const WELCOME = `<h1>Welcome to Interview Notes</h1>
-<p>This is a normal document — type, paste from Google Docs or Word, add images and tables. Pages show like Google Docs; Ctrl + Enter starts a new page.</p>
+<p>This is a normal document — type, paste from Google Docs or Word, add images and tables. Pages show like Google Docs; type @ for page breaks, tables and more.</p>
 <p><b>Shortcuts</b></p>
 <ul><li><b>Ctrl + ]</b> — show / hide the overlay (works from any app)</li>
 <li><b>Ctrl + Alt + I</b> — switch between editor and immersive mode</li>

@@ -33,11 +33,13 @@ You can also check from **Settings → Updates** or **Tools → Check for update
 | **Ctrl + Alt + M** | Overlay: 1 line → 2 lines → custom → up to 25 |
 | **Ctrl + Alt + O** | Overlay opacity |
 | **Ctrl + Alt + 0** | Move the overlay back to the top of the screen |
-| **Ctrl + Enter** | Page break |
+| **Ctrl + Alt + Home / End** | Overlay: back to the start / go to the end |
+| **Ctrl + Alt + = / −** | Overlay text size |
+| **@** then **Tab** | Insert a page break, table, date, list… (type @page, press Tab) |
 | **Tab / Shift + Tab** | Indent / outdent a bullet |
 | **Ctrl + Q** | Quit |
 
-Every shortcut, including bold, headings, zoom and the overlay keys, can be changed in **Settings → Keyboard shortcuts** (the sliders icon at the top right). Only copy, cut, paste, select all and Tab stay fixed.
+The overlay and from-any-app shortcuts can be changed in **Settings → Keyboard shortcuts** (the sliders icon at the top right). Standard editing keys (Ctrl + Z, Ctrl + B, Ctrl + P, …) work as usual.
 
 ## Your notes stay on your PC
 
