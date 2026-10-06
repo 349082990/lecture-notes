@@ -19,6 +19,14 @@ bundled by esbuild into `renderer/editor.bundle.js` — generated and git-ignore
    on quit without asking.
    `build.electronLanguages` is `en-US` only (saves ~40 MB of locale files per install).
 
+4. **Documentation:** the `WELCOME` document in main.js is the app's user guide (features, shortcuts,
+   overlay, settings, updates). Update it in the same change whenever a feature or default shortcut
+   changes. Unedited Welcome docs are replaced at launch (`refreshWelcome`, matched by a text hash
+   against `settings.welcomeHash` and `OLD_WELCOMES`); edited ones are left alone.
+
+No em dashes (—) in anything users see (UI text, dialogs, the Welcome doc, release notes): the user
+finds they read as AI-written. Use a period, colon, comma or parentheses instead.
+
 Source lives in the private `lecture-notes` repo; only installers (and `public-repo/README.md`,
 copied by hand) go to the public `interview-notes` repo, renamed from `lecture-notes-releases` —
 copies before 2.0 still point at the old name and reach it through GitHub's redirect.

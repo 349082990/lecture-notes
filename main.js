@@ -67,7 +67,8 @@ const DEFAULTS = {
   sidebarOpen: false,
   readPositions: {},
   lastAutoUpdate: null,                  // version last auto-installed at launch (stops a retry loop if it fails)
-  lastRunVersion: null                   // to say "Updated to …" after an update
+  lastRunVersion: null,                  // to say "Updated to …" after an update
+  welcomeHash: null                      // text hash of the Welcome document this app last wrote
 };
 
 let settings = loadSettings();
@@ -664,7 +665,7 @@ function showUpdateScreen(version) {
     .bar{height:100%;width:35%;border-radius:2px;background:${c.bar};animation:m 1.3s ease-in-out infinite}
     @keyframes m{0%{transform:translateX(-100%)}100%{transform:translateX(290%)}}
   </style><h1>Updating Interview Notes</h1>
-  <p id="msg">Installing version ${String(version).replace(/[<&]/g, '')}. The app will close and reopen by itself in a few seconds &mdash; you don&rsquo;t need to do anything.</p>
+  <p id="msg">Installing version ${String(version).replace(/[<&]/g, '')}. The app will close and reopen by itself in a few seconds. You don&rsquo;t need to do anything.</p>
   <div class="track"><div class="bar"></div></div><p>Your notes are saved.</p>`;
   updateVersion = String(version).replace(/[<&]/g, '');
   updateWin = new BrowserWindow({
@@ -685,8 +686,8 @@ async function setUpdateScreen(phase, percent) {
   await updateWinReady;
   if (!updateWin || updateWin.isDestroyed()) return;
   const text = phase === 'downloading'
-    ? `Downloading version ${updateVersion}${percent != null ? ' — ' + Math.round(percent) + '%' : '…'}. Interview Notes will then close and reopen by itself.`
-    : `Installing version ${updateVersion}. The app will close and reopen by itself in a few seconds \u2014 you don\u2019t need to do anything.`;
+    ? `Downloading version ${updateVersion}${percent != null ? ' (' + Math.round(percent) + '%)' : '…'}. Interview Notes will then close and reopen by itself.`
+    : `Installing version ${updateVersion}. The app will close and reopen by itself in a few seconds. You don\u2019t need to do anything.`;
   updateWin.webContents.executeJavaScript(`document.getElementById('msg').textContent = ${JSON.stringify(text)}`).catch(() => {});
 }
 function closeUpdateScreen() {
@@ -801,21 +802,83 @@ async function listTree(dirAbs) {
   return out;
 }
 
+// The Welcome document doubles as the app's documentation: keep it up to date whenever a feature
+// or shortcut changes (and no em dashes). Copies that were never edited are replaced with this
+// text at launch, so people who already have the app get the new version too (refreshWelcome).
 const WELCOME = `<h1>Welcome to Interview Notes</h1>
-<p>This is a normal document — type, paste from Google Docs or Word, add images and tables. Pages show like Google Docs; type @ for page breaks, tables and more.</p>
-<p><b>Shortcuts</b></p>
-<ul><li><b>Ctrl + ]</b> — show / hide the overlay (works from any app)</li>
-<li><b>Ctrl + Alt + I</b> — switch between editor and immersive mode</li>
-<li>In immersive mode: scroll, arrow keys or Space to move; drag anywhere to move the window; drag the edges to resize</li>
-<li>Ctrl + scroll in immersive mode changes the text size</li></ul>
-<p>Open the <b>☰</b> menu (top left) for all your documents and folders. Everything is saved automatically as you type.</p>
-<p>Settings (gear icon) lets you change the theme, margins, opacity, lines per view and shortcuts.</p>`;
+<p>Interview Notes is a notes editor with a small reading overlay that floats on top of other apps, so you can keep your notes in view while you're doing something else. This page walks you through how everything works. It's a normal document, so feel free to edit it or delete it.</p>
+<h2>The basics</h2>
+<ul><li>Everything saves automatically as you type. You can also press <b>Ctrl + S</b> any time.</li>
+<li>Press <b>Ctrl + N</b> for a new document.</li>
+<li>Open the <b>☰</b> menu (top left) or press <b>Ctrl + O</b> to see all your documents and folders. Use the search box to find one, and right-click a document or folder to rename it, move it, delete it or show it in File Explorer.</li>
+<li>Click the document's name at the top to rename it.</li>
+<li>Your documents are plain files in the Interview Notes folder in Documents. You can pick a different folder in Settings.</li></ul>
+<h2>Writing</h2>
+<ul><li>Pages look like Google Docs, and text flows onto the next page by itself. The page you're on is shown at the bottom left, and hovering over the scrollbar shows the page at that spot.</li>
+<li>Type <b>@</b> at the start of a line or after a space to insert things: a page break, today's date, a table, a checklist, lists, headings, a horizontal line, an image or a link. Keep typing to narrow the list (for example <b>@page</b>), then press Enter or Tab.</li>
+<li>Paste from Google Docs or Word and the formatting comes with it. <b>Ctrl + Shift + V</b> pastes plain text.</li>
+<li>The toolbar has fonts, text size, bold, italic, underline, colors, highlight, links, images, tables, alignment, lists and line spacing. Drag an image's corner to resize it.</li>
+<li>Use headings for the sections of your notes. They're what the heading jumps below move between, in both the editor and the overlay.</li>
+<li><b>Ctrl + F</b> finds text, and <b>Ctrl + H</b> finds and replaces.</li>
+<li>Right-click a misspelled word for suggestions or to add it to the dictionary. Spell check can be turned off in the Tools menu.</li>
+<li><b>Ctrl + Shift + C</b> (or clicking the word count at the bottom) shows the word count.</li>
+<li>Zoom with <b>Ctrl + =</b> and <b>Ctrl + -</b>, or hold Ctrl and scroll. <b>Ctrl + 0</b> goes back to 100%. <b>F11</b> is full screen.</li></ul>
+<h2>Import, download and print</h2>
+<ul><li><b>File &gt; Import</b> opens .docx, .html and .txt files as new documents.</li>
+<li><b>File &gt; Download as</b> saves a copy as Word (.docx), PDF or a web page.</li>
+<li><b>Ctrl + P</b> prints.</li></ul>
+<h2>The immersive overlay</h2>
+<p>The overlay is a small, frameless reader that shows a few lines of your document at a time and stays on top of other windows. It remembers where you were reading in each document.</p>
+<ul><li><b>Ctrl + Alt + I</b> switches between the editor and the overlay, from any app.</li>
+<li>Drag anywhere on the overlay to move it, and drag its edges to resize it.</li>
+<li>Scroll over the overlay to move through your notes. To move it without leaving the app you're in, hold <b>Alt</b> and scroll anywhere on screen, or press <b>Alt + Up</b> / <b>Alt + Down</b>.</li>
+<li><b>Ctrl + Alt + Up</b> / <b>Ctrl + Alt + Down</b> (or Ctrl + Alt + scroll) jumps to the previous or next heading.</li>
+<li><b>Ctrl + Alt + Home</b> / <b>Ctrl + Alt + End</b> goes to the start or the end.</li>
+<li><b>Ctrl + Alt + =</b> / <b>Ctrl + Alt + -</b> makes the text bigger or smaller. Ctrl + scroll over the overlay does the same.</li>
+<li><b>Ctrl + Alt + M</b> changes how many lines are shown (1, 2, your custom number, or up to 25).</li>
+<li><b>Ctrl + Alt + O</b> changes the overlay's opacity (100, 80, 60, 40, 20%).</li>
+<li><b>Ctrl + Alt + 0</b> moves the overlay back to the top of the screen, centered.</li>
+<li><b>Esc</b> (when the overlay has focus) goes back to the editor.</li></ul>
+<p>The overlay keys only work from other apps while the overlay is showing, so they don't get in the way the rest of the time.</p>
+<h2>Showing, hiding and closing</h2>
+<ul><li><b>Ctrl + ]</b> shows or hides Interview Notes from any app.</li>
+<li>The <b>×</b> button quits the app. Minimizing puts it on the taskbar, or in the tray if you turn on "Minimize to the tray" in Settings.</li>
+<li>Turn on "Start with Windows" in Settings to open it automatically when you sign in.</li></ul>
+<h2>Settings</h2>
+<p>Open Settings with the sliders button at the top right or <b>Ctrl + ,</b>. There you can:</p>
+<ul><li>Pick the theme (follow Windows, light or dark), how dark mode looks, and the page color in dark mode.</li>
+<li>Set up the overlay: lines shown, how far one scroll moves, heading size, text size, margins, opacity and always on top.</li>
+<li>Choose the editor's page margins, default font, size and line spacing.</li>
+<li>Change any keyboard shortcut: click it and press the new keys. You can also reset them all.</li>
+<li>Choose where your documents are kept.</li></ul>
+<h2>Updates</h2>
+<p>Each time you open the app, it checks for a new version and downloads it in the background. If there is one, it asks whether to update now or later. Nothing is installed unless you say yes. Updating saves your notes, closes the app for a few seconds and reopens it. You can also check yourself in Settings or the Tools menu.</p>`;
+
+// Replace a Welcome document nobody has edited (one this app wrote, or an earlier version's text)
+// with the current one. Compared by text, so a copy re-saved without changes still counts.
+const OLD_WELCOMES = ['23ce57ec871456b9', 'f579f20010d61d06', '18f55984330068aa']; // Welcome texts shipped before 2.0.8
+const welcomeHash = (html) => require('crypto').createHash('sha1')
+  .update(bodyOf(html).replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;|&#\d+;/gi, ' ').replace(/\s+/g, ' ').trim())
+  .digest('hex').slice(0, 16);
+async function refreshWelcome() {
+  const file = path.join(root(), 'Welcome' + DOC_EXT);
+  const want = welcomeHash(WELCOME);
+  let have;
+  try { have = welcomeHash(await fsp.readFile(file, 'utf8')); } catch { return; } // deleted: leave it gone
+  if (have === want) return;
+  if (have !== settings.welcomeHash && !OLD_WELCOMES.includes(have)) return; // edited: it's theirs now
+  await fsp.writeFile(file, wrapHtml('Welcome', WELCOME));
+  settings.welcomeHash = want;
+  saveSettingsNow();
+}
 
 async function ensureRoot() {
   await fsp.mkdir(root(), { recursive: true });
   const items = await fsp.readdir(root());
   if (!items.some(n => n.toLowerCase().endsWith(DOC_EXT) || !n.includes('.'))) {
     await fsp.writeFile(path.join(root(), 'Welcome' + DOC_EXT), wrapHtml('Welcome', WELCOME));
+    settings.welcomeHash = welcomeHash(WELCOME);
+    saveSettingsNow();
   }
 }
 
@@ -1052,7 +1115,7 @@ async function printDoc(title, body, pageCss) {
   const wa = screen.getDisplayMatching(win.getBounds()).workArea;
   printWin = new BrowserWindow({
     width: Math.min(900, wa.width - 40), height: Math.min(1000, wa.height - 40), show: false, center: true,
-    title: `Print — ${title}`, icon: path.join(__dirname, 'build', 'icon.png'), backgroundColor: '#e8eaed',
+    title: `Print: ${title}`, icon: path.join(__dirname, 'build', 'icon.png'), backgroundColor: '#e8eaed',
     autoHideMenuBar: true, webPreferences: { javascript: false }
   });
   printWin.setMenu(null);
@@ -1087,7 +1150,7 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   nativeTheme.themeSource = settings.theme;
   nativeTheme.on('updated', () => win && win.webContents.send('theme-changed'));
-  try { await ensureRoot(); } catch (e) { console.error(e); }
+  try { await ensureRoot(); await refreshWelcome(); } catch (e) { console.error(e); }
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!settings.launchAtStartup });
   setupIpc();
   createWindow();

@@ -156,7 +156,7 @@
     $("#imm-lines").textContent =
       S.linesPerView === 25 ? "25" : S.linesPerView + "L";
     $("#imm-lines").title =
-      `Lines per view: ${S.linesPerView === 25 ? "default (25 max)" : S.linesPerView} — click or ${prettyAccel(S.linesShortcut)} to change`;
+      `Lines per view: ${S.linesPerView === 25 ? "default (25 max)" : S.linesPerView}. Click or ${prettyAccel(S.linesShortcut)} to change`;
     $("#hint").textContent =
       `${prettyAccel(S.toggleShortcut)} hide · ${prettyAccel(S.immersiveShortcut)} immersive`;
     window.docDefaults = {
@@ -228,7 +228,7 @@
     setSetting({ overlayOpacity: next }, true);
     toast(
       `Overlay opacity ${Math.round(next * 100)}%` +
-        (S.mode === "immersive" ? "" : " — shows in the overlay"),
+        (S.mode === "immersive" ? "" : " (shows in the overlay)"),
       1400,
     );
   }
@@ -369,7 +369,7 @@
     // (sizes over 10 pt, headings wrapped around lists etc. are fixed while loading)
     editor.ln.load(html && html.trim() ? html : "<p><br></p>");
     titleInput.value = baseName(rel);
-    document.title = baseName(rel) + " — Interview Notes";
+    document.title = baseName(rel) + " - Interview Notes";
     saveState.textContent = "Saved to this PC";
     targetFolder = dirOf(rel);
     canvas.scrollTop = 0;
@@ -2874,7 +2874,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     downloading: (u) =>
       `Downloading version ${u.version}… ${u.percent != null ? Math.round(u.percent) + "%" : ""}`,
     ready: (u) =>
-      `Version ${u.version} is ready to install — click Restart & update now, or you'll be asked next time you open the app.`,
+      `Version ${u.version} is ready to install. Click Restart & update now, or you'll be asked next time you open the app.`,
     installing: (u) => `Installing version ${u.version}…`,
     error: (u) =>
       `Couldn't check for updates${u.message ? ": " + u.message : ""}`,
@@ -3231,7 +3231,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     const sig = JSON.stringify(errs);
     // shortcuts are re-registered on every mode switch — only mention a problem once
     if (msgs.length && sig !== lastShortcutErrs)
-      toast("Shortcut problem: " + msgs[0] + " — change it in Settings", 6000);
+      toast("Shortcut problem: " + msgs[0] + ". Change it in Settings", 6000);
     lastShortcutErrs = sig;
   });
   window.addEventListener("focus", () => refreshTreeSoon());
