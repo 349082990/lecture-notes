@@ -20,6 +20,7 @@
       while (pagesEl.children.length < n) pagesEl.appendChild(document.createElement("div"));
       while (pagesEl.children.length > n) pagesEl.lastChild.remove();
       ed.style.minHeight = n * PAGE_H + (n - 1) * PAGE_GAP + "px";
+      updatePageCount();
     },
     onPaste: (e, view) => handlePaste(e, view),
     onDrop: (e, view, moved) => handleDrop(e, view, moved),
@@ -1053,6 +1054,7 @@
   canvas.addEventListener("scroll", () => {
     positionImageUi();
     hideLinkBubble();
+    updatePageCount();
   });
   window.addEventListener("resize", () => {
     positionImageUi();
@@ -1337,11 +1339,30 @@
       `${n.toLocaleString()} word${n === 1 ? "" : "s"}`;
   }
   const updateWordCountSoon = debounce(updateWordCount, 400);
+  // "Page 2 of 6": the page at the top part of the screen, like Google Docs
+  function updatePageCount() {
+    const n = Math.max(1, $("#pages").children.length);
+    const c = canvas.getBoundingClientRect(),
+      s = $("#sheet").getBoundingClientRect();
+    const y = (c.top + Math.min(c.height / 3, 200) - s.top) / currentZoom();
+    const at = Math.max(1, Math.min(n, Math.floor(y / (PAGE_H + PAGE_GAP)) + 1));
+    $("#page-count").textContent = `Page ${at} of ${n}`;
+  }
   $("#word-count").onclick = showWordCount;
 
   /* ---------------- popovers ---------------- */
   const pop = $("#popover");
+  // Toolbar popovers (colours, line spacing, table): clicking the same button again closes it.
+  // Returns false when it closed instead of opening.
+  let popAnchor = null;
   function showPopover(anchor, html, onClick) {
+    if (!pop.hidden && popAnchor === anchor) {
+      hidePopover();
+      return false;
+    }
+    hidePopover();
+    popAnchor = anchor;
+    anchor.classList.add("open");
     pop.innerHTML = html;
     pop.hidden = false;
     const r = anchor.getBoundingClientRect();
@@ -1350,17 +1371,22 @@
     pop.style.top =
       Math.min(innerHeight - pop.offsetHeight - 8, r.bottom + 4) + "px";
     pop.onclick = (e) => onClick(e);
+    return true;
   }
   function hidePopover() {
     pop.hidden = true;
     pop.innerHTML = "";
     pop.onclick = null;
+    pop.onmouseover = null;
+    if (popAnchor) popAnchor.classList.remove("open");
+    popAnchor = null;
   }
   pop.addEventListener("mousedown", (e) => {
     if (e.target.tagName !== "INPUT") e.preventDefault();
   });
   document.addEventListener("mousedown", (e) => {
-    if (!pop.hidden && !pop.contains(e.target) && !e.target.closest(".tb"))
+    // (a click on the popover's own button is left to toggle it)
+    if (!pop.hidden && !pop.contains(e.target) && e.target.closest(".tb") !== popAnchor)
       hidePopover();
   });
 
@@ -1447,7 +1473,7 @@
     "#4c1130",
   ];
   function colorPopover(btn, kind) {
-    showPopover(
+    const opened = showPopover(
       btn,
       `<div class="palette">${PALETTE.map((c) => `<button data-c="${c}" title="${c}" style="background:${c}"></button>`).join("")}</div>
       <div class="pop-row"><button class="text-btn" data-c="reset">${kind === "hiliteColor" ? "None" : "Reset"}</button>
@@ -1459,6 +1485,7 @@
         hidePopover();
       },
     );
+    if (!opened) return;
     $("#custom-color").onchange = (e) => {
       setColor(kind, e.target.value);
       hidePopover();
@@ -1494,7 +1521,7 @@
   function tablePopover(btn) {
     const R = 8,
       C = 10;
-    showPopover(
+    const opened = showPopover(
       btn,
       `<div class="grid-pick">${Array.from({ length: R * C }, (_, i) => `<span data-r="${Math.floor(i / C) + 1}" data-c="${(i % C) + 1}"></span>`).join("")}</div><div class="grid-label">Insert table</div>`,
       (e) => {
@@ -1504,6 +1531,7 @@
         insertTable(+s.dataset.r, +s.dataset.c);
       },
     );
+    if (!opened) return;
     pop.onmouseover = (e) => {
       const s = e.target.closest("[data-r]");
       if (!s) return;
@@ -1547,6 +1575,7 @@
     document.documentElement.style.setProperty("--zoom", z);
     $("#zoom-label").textContent =
       (v === "fit" ? "Fit " : "") + Math.round(z * 100) + "%";
+    updatePageCount();
   }
   function setZoom(v) {
     ls.set(zoomKey(), String(v));
@@ -1745,8 +1774,10 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       { id: "docs", label: "Open… (document list)", accel: "CmdOrCtrl+O" },
       { type: "separator" },
       { id: "import", label: "Import .docx / .html / .txt…" },
+      { id: "print", label: "Print…", accel: "CmdOrCtrl+P" },
+      { id: "export:pdf", label: "Download as PDF" },
       {
-        label: "Download",
+        label: "Download as…",
         submenu: [
           { id: "export:docx", label: "Microsoft Word (.docx)" },
           { id: "export:pdf", label: "PDF document (.pdf)" },
@@ -1757,8 +1788,6 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       { id: "rename", label: "Rename" },
       { id: "delete", label: "Move to bin" },
       { id: "reveal", label: "Show in File Explorer" },
-      { type: "separator" },
-      { id: "print", label: "Print", accel: "CmdOrCtrl+P" },
       { type: "separator" },
       { id: "hide", label: "Hide window", accel: S.toggleShortcut },
       { id: "quit", label: "Quit", accel: "CmdOrCtrl+Q" },
@@ -2436,6 +2465,17 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     openDialog("dlg-settings");
   }
   $("#btn-settings").onclick = openSettings;
+  $("#btn-export").onclick = async () => {
+    const r = $("#btn-export").getBoundingClientRect();
+    const id = await api.call("menu:popup", [
+      { id: "print", label: "Print…", accel: "CmdOrCtrl+P" },
+      { type: "separator" },
+      { id: "export:pdf", label: "Download as PDF (.pdf)" },
+      { id: "export:docx", label: "Download as Word (.docx)" },
+      { id: "export:html", label: "Download as web page (.html)" },
+    ], Math.round(r.left), Math.round(r.bottom + 2));
+    if (id) run(id);
+  };
   $("#btn-hide").onclick = () => run("hide");
   $("#btn-close").onclick = () => run("quit");
   $$(".seg[data-setting], .pv-group[data-setting]").forEach((seg) =>
@@ -2870,5 +2910,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     },
     openDoc,
     editor,
+    exportHtml,
+    pageCss,
   };
 })();

@@ -20,6 +20,7 @@
     <div class="drag-space"></div>
     <button class="pill-btn update-pill" id="btn-update" title="An update is ready — click to restart and install it" hidden><span data-icon="download"></span><span>Restart to update</span></button>
     <button class="pill-btn" id="btn-immersive" title="Immersive mode (Ctrl+Alt+I)"><span data-icon="book"></span><span>Immersive</span></button>
+    <button class="icon-btn" id="btn-export" title="Print or download as PDF / Word (Ctrl+P prints)" data-icon="download"></button>
     <button class="icon-btn" id="btn-fullscreen" title="Full screen (F11)" data-icon="fullscreen"></button>
     <button class="icon-btn" id="btn-settings" title="Settings (Ctrl+,)" data-icon="sliders"></button>
     <button class="icon-btn" id="btn-hide" title="Hide (Ctrl+])" data-icon="minus"></button>
@@ -117,7 +118,9 @@
   </div>
 
   <footer id="statusbar">
-    <span id="word-count">0 words</span>
+    <span id="page-count" title="The page you're looking at">Page 1 of 1</span>
+    <span class="dot">·</span>
+    <button id="word-count" title="Word count details (Ctrl+Shift+C)">0 words</button>
     <span class="grow"></span>
     <span class="zoom-ctl">
       <button id="zoom-out" title="Zoom out (Ctrl+−)" data-icon="minus" data-size="13"></button>
