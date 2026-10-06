@@ -11,7 +11,7 @@
 <!-- ================= EDITOR MODE ================= -->
 <div id="app">
   <header id="titlebar">
-    <button class="icon-btn" id="btn-sidebar" title="Documents (Ctrl+O)" data-icon="menu"></button>
+    <button class="icon-btn" id="btn-sidebar" data-key-cmd="docs" title="Documents (Ctrl+O)" data-icon="menu"></button>
     <span class="doc-icon" data-icon="doc"></span>
     <div class="title-wrap">
       <input id="doc-title" spellcheck="false" value="Untitled document" title="Rename">
@@ -21,8 +21,8 @@
     <button class="pill-btn update-pill" id="btn-update" title="An update is ready — click to restart and install it" hidden><span data-icon="download"></span><span>Restart to update</span></button>
     <button class="pill-btn" id="btn-immersive" title="Immersive mode (Ctrl+Alt+I)"><span data-icon="book"></span><span>Immersive</span></button>
     <button class="icon-btn" id="btn-export" title="Print or download as PDF / Word (Ctrl+P prints)" data-icon="download"></button>
-    <button class="icon-btn" id="btn-fullscreen" title="Full screen (F11)" data-icon="fullscreen"></button>
-    <button class="icon-btn" id="btn-settings" title="Settings (Ctrl+,)" data-icon="sliders"></button>
+    <button class="icon-btn" id="btn-fullscreen" data-key-cmd="fullscreen" title="Full screen (F11)" data-icon="fullscreen"></button>
+    <button class="icon-btn" id="btn-settings" data-key-cmd="settings" title="Settings (Ctrl+,)" data-icon="sliders"></button>
     <button class="icon-btn" id="btn-hide" title="Hide (Ctrl+])" data-icon="minus"></button>
     <button class="icon-btn" id="btn-close" title="Close Interview Notes — quits the app (Alt+F4)" data-icon="x"></button>
   </header>
@@ -99,7 +99,7 @@
     <aside id="sidebar">
       <div class="sb-head">
         <span class="sb-title">Documents</span>
-        <button class="icon-btn sm" id="sb-new-doc" title="New document (Ctrl+N)" data-icon="filePlus"></button>
+        <button class="icon-btn sm" id="sb-new-doc" data-key-cmd="new" title="New document (Ctrl+N)" data-icon="filePlus"></button>
         <button class="icon-btn sm" id="sb-new-folder" title="New folder" data-icon="folderPlus"></button>
         <button class="icon-btn sm" id="sb-open-folder" title="Show in File Explorer" data-icon="external"></button>
       </div>
@@ -120,7 +120,7 @@
   <footer id="statusbar">
     <span id="page-count" title="The page you're looking at">Page 1 of 1</span>
     <span class="dot">·</span>
-    <button id="word-count" title="Word count details (Ctrl+Shift+C)">0 words</button>
+    <button id="word-count" data-key-cmd="wordCount" title="Word count details (Ctrl+Shift+C)">0 words</button>
     <span class="grow"></span>
     <span class="zoom-ctl">
       <button id="zoom-out" title="Zoom out (Ctrl+−)" data-icon="minus" data-size="13"></button>
@@ -244,19 +244,22 @@
       </section>
       <section>
         <h3>Keyboard shortcuts</h3>
-        <p class="sec-intro">These work even while you're in another app. Click a box and press the new keys to change one.</p>
-        <div class="row"><span>Show / hide Interview Notes</span><div class="sc-wrap"><input class="shortcut" data-setting="toggleShortcut" readonly><small class="sc-err" data-err="toggleShortcut"></small></div></div>
-        <div class="row"><span>Switch editor ↔ overlay</span><div class="sc-wrap"><input class="shortcut" data-setting="immersiveShortcut" readonly><small class="sc-err" data-err="immersiveShortcut"></small></div></div>
-        <div class="row"><span>Change lines shown<small class="row-hint">Steps 1 → 2 → custom → 25 lines.</small></span><div class="sc-wrap"><input class="shortcut" data-setting="linesShortcut" readonly><small class="sc-err" data-err="linesShortcut"></small></div></div>
-        <div class="row"><span>Change overlay opacity<small class="row-hint">Steps 100 → 80 → 60 → 40 → 20%.</small></span><div class="sc-wrap"><input class="shortcut" data-setting="opacityShortcut" readonly><small class="sc-err" data-err="opacityShortcut"></small></div></div>
-        <div class="row"><span>Previous heading<small class="row-hint">Overlay: jump to the heading above. Editor: scroll to it. Only taken from other apps while the overlay is showing.</small></span><div class="sc-wrap"><input class="shortcut" data-setting="headingPrevShortcut" readonly><small class="sc-err" data-err="headingPrevShortcut"></small></div></div>
-        <div class="row"><span>Next heading</span><div class="sc-wrap"><input class="shortcut" data-setting="headingNextShortcut" readonly><small class="sc-err" data-err="headingNextShortcut"></small></div></div>
-        <div class="row"><span>Recenter the overlay<small class="row-hint">Moves the overlay to the very top of the screen, centred, keeping its width. Only taken from other apps while the overlay is showing — in the editor Ctrl + Alt + 0 is still "Normal text".</small></span><div class="sc-wrap"><input class="shortcut" data-setting="recenterShortcut" readonly><small class="sc-err" data-err="recenterShortcut"></small></div></div>
-        <div class="row"><span>Scroll the overlay from any app<small class="row-hint">Hold this and scroll anywhere on screen to move the overlay. Normal scrolling over the overlay still works.</small></span>
+        <p class="sec-intro">Every shortcut can be changed. Click a shortcut and press the new keys, × removes one, + adds another, ↺ puts back the default.</p>
+        <div class="keys-search"><span data-icon="search"></span><input id="keys-filter" placeholder="Search shortcuts (e.g. bold, heading, zoom)"></div>
+        <h4 class="keys-group" data-group="Global">Work from any app</h4>
+        <div class="row" data-key-search data-group="Global"><span>Show / hide Interview Notes</span><div class="sc-wrap"><input class="shortcut" data-setting="toggleShortcut" readonly><small class="sc-err" data-err="toggleShortcut"></small></div></div>
+        <div class="row" data-key-search data-group="Global"><span>Switch editor ↔ overlay</span><div class="sc-wrap"><input class="shortcut" data-setting="immersiveShortcut" readonly><small class="sc-err" data-err="immersiveShortcut"></small></div></div>
+        <div class="row" data-key-search data-group="Global"><span>Change lines shown<small class="row-hint">Steps 1 → 2 → custom → 25 lines.</small></span><div class="sc-wrap"><input class="shortcut" data-setting="linesShortcut" readonly><small class="sc-err" data-err="linesShortcut"></small></div></div>
+        <div class="row" data-key-search data-group="Global"><span>Change overlay opacity<small class="row-hint">Steps 100 → 80 → 60 → 40 → 20%.</small></span><div class="sc-wrap"><input class="shortcut" data-setting="opacityShortcut" readonly><small class="sc-err" data-err="opacityShortcut"></small></div></div>
+        <div class="row" data-key-search data-group="Global"><span>Previous heading<small class="row-hint">Overlay: jump to the heading above. Editor: scroll to it. Only taken from other apps while the overlay is showing.</small></span><div class="sc-wrap"><input class="shortcut" data-setting="headingPrevShortcut" readonly><small class="sc-err" data-err="headingPrevShortcut"></small></div></div>
+        <div class="row" data-key-search data-group="Global"><span>Next heading</span><div class="sc-wrap"><input class="shortcut" data-setting="headingNextShortcut" readonly><small class="sc-err" data-err="headingNextShortcut"></small></div></div>
+        <div class="row" data-key-search data-group="Global"><span>Recenter the overlay<small class="row-hint">Moves the overlay to the very top of the screen, centred, keeping its width. Only taken from other apps while the overlay is showing — in the editor Ctrl + Alt + 0 is still "Normal text".</small></span><div class="sc-wrap"><input class="shortcut" data-setting="recenterShortcut" readonly><small class="sc-err" data-err="recenterShortcut"></small></div></div>
+        <div class="row" data-key-search data-group="Global"><span>Scroll the overlay from any app<small class="row-hint">Hold this and scroll anywhere on screen to move the overlay. Normal scrolling over the overlay still works.</small></span>
           <select data-setting="anywhereScroll"><option value="alt">Alt + scroll</option><option value="ctrl+alt">Ctrl + Alt + scroll</option><option value="shift+alt">Shift + Alt + scroll</option><option value="ctrl+shift">Ctrl + Shift + scroll</option><option value="off">Off</option></select></div>
-        <div class="row"><span>Jump between headings by scrolling<small class="row-hint">Hold this and scroll: down for the next heading, up for the previous one. Works in the editor, and from any app while the overlay is showing.</small></span>
+        <div class="row" data-key-search data-group="Global"><span>Jump between headings by scrolling<small class="row-hint">Hold this and scroll: down for the next heading, up for the previous one. Works in the editor, and from any app while the overlay is showing.</small></span>
           <select data-setting="headingScroll"><option value="ctrl+alt">Ctrl + Alt + scroll</option><option value="shift+alt">Shift + Alt + scroll</option><option value="ctrl+shift">Ctrl + Shift + scroll</option><option value="alt">Alt + scroll</option><option value="off">Off</option></select></div>
-        <div class="row"><span></span><button class="text-btn" id="sc-reset">Reset to defaults</button></div>
+        <div id="app-keys"></div>
+        <div class="row"><span></span><button class="text-btn" id="sc-reset">Reset all shortcuts</button></div>
       </section>
       <section>
         <h3>Storage</h3>
@@ -264,7 +267,7 @@
       </section>
       <section>
         <h3>Updates</h3>
-        <div class="row"><span id="set-update-status">Updates install automatically when you restart the app.</span><button class="text-btn" id="set-update">Check for updates</button></div>
+        <div class="row"><span id="set-update-status">When there's a new version, you're asked whether to install it each time you open the app.</span><button class="text-btn" id="set-update">Check for updates</button></div>
       </section>
       <section class="about">
         <span id="set-version"></span>

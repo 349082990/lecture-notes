@@ -13,6 +13,21 @@ import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table
 import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import { HardBreak } from '@tiptap/extension-hard-break'
+import { Bold } from '@tiptap/extension-bold'
+import { Italic } from '@tiptap/extension-italic'
+import { Underline } from '@tiptap/extension-underline'
+import { Strike } from '@tiptap/extension-strike'
+import { Heading } from '@tiptap/extension-heading'
+import { Paragraph } from '@tiptap/extension-paragraph'
+import { Blockquote } from '@tiptap/extension-blockquote'
+import { CodeBlock } from '@tiptap/extension-code-block'
+import { BulletList, OrderedList } from '@tiptap/extension-list'
+import { UndoRedo } from '@tiptap/extensions'
+
+// Every shortcut (bold, headings, lists, undo, …) is set in the app's Settings and handled by app.js,
+// so these extensions lose their built-in keys — otherwise Ctrl+B would still bold after rebinding.
+// Enter / Backspace / Tab in lists and tables are editing keys and stay.
+const noKeys = ext => ext.extend({ addKeyboardShortcuts() { return {} } })
 
 /* ---------------- HTML clean-up before parsing ---------------- */
 const KEEP_CLASSES = ['title', 'subtitle', 'checklist', 'ln-table', 'ln-ink']
@@ -293,7 +308,7 @@ const Tab = Node.create({
   },
 })
 
-// Ctrl + Enter, like Google Docs. Everything after it starts on a new page.
+// Insert → Page break (Ctrl + Enter by default, like Google Docs). Everything after it starts on a new page.
 const PageBreak = Node.create({
   name: 'pageBreak',
   group: 'block',
@@ -324,9 +339,6 @@ const PageBreak = Node.create({
         return true
       },
     }
-  },
-  addKeyboardShortcuts() {
-    return { 'Mod-Enter': () => this.editor.commands.insertPageBreak() }
   },
 })
 
@@ -604,17 +616,20 @@ export function createEditor(element, hooks = {}) {
       StarterKit.configure({
         code: false,
         hardBreak: false,
-        heading: { levels: [1, 2, 3, 4, 5, 6] },
+        bold: false, italic: false, underline: false, strike: false, heading: false, paragraph: false,
+        blockquote: false, codeBlock: false, bulletList: false, orderedList: false, undoRedo: false,
         link: { openOnClick: false, autolink: true, linkOnPaste: true, HTMLAttributes: { target: null, rel: null, class: null } },
         dropcursor: { color: '#1a73e8', width: 2 },
-        undoRedo: { depth: 300 },
         trailingNode: false,
       }),
+      noKeys(Paragraph), noKeys(Heading).configure({ levels: [1, 2, 3, 4, 5, 6] }),
+      noKeys(Bold), noKeys(Italic), noKeys(Underline), noKeys(Strike),
+      noKeys(Blockquote), noKeys(CodeBlock), noKeys(BulletList), noKeys(OrderedList),
+      noKeys(UndoRedo).configure({ depth: 300 }),
       HardBreak.extend({ addKeyboardShortcuts() { return { 'Shift-Enter': () => this.editor.commands.setHardBreak() } } }),
       TextStyle.configure({ mergeNestedSpanStyles: true }),
       Color, FontFamily, FontSize, BackgroundColor,
-      Subscript.extend({ addKeyboardShortcuts() { return {} } }), // Ctrl+, opens Settings
-      Superscript,
+      noKeys(Subscript), noKeys(Superscript),
       Table.configure({ resizable: false }), TableRow, TableHeader, TableCell,
       BlockAttrs, Ink, Image, Tab, PageBreak, FindHighlights,
       Pages({ pageH: hooks.pageH || 1056, gap: hooks.gap || 16, onPages: hooks.onPages, scroller: hooks.scroller }),

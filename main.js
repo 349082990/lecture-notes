@@ -34,6 +34,7 @@ const DEFAULTS = {
   headingPrevShortcut: 'CommandOrControl+Alt+Up',   // global only while the overlay shows
   headingNextShortcut: 'CommandOrControl+Alt+Down',
   recenterShortcut: 'CommandOrControl+Alt+0',       // overlay back to the top of the screen, centred; global only while the overlay shows
+  keys: {},                              // in-app shortcuts changed in Settings: { command: [accelerators] }
   immersiveHeadings: 'flat',             // flat (same size as text) | original
   anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
   headingScroll: 'ctrl+alt',             // modifier + scroll = previous / next heading (overlay: from any app): same choices
@@ -71,7 +72,6 @@ let shortcutErrors = {};
 let fullBounds = null;                   // editor bounds to restore when leaving full screen
 let updater = null;
 let updateStatus = { state: app.isPackaged ? 'idle' : 'dev' };
-const launchedAt = Date.now();
 
 function loadSettings() {
   try {
@@ -458,9 +458,15 @@ function refreshTrayMenu() {
 
 /* ---------------- updates ---------------- */
 // Releases are published to GitHub (see "publish" in package.json and scripts/release.js).
-// The app checks at launch and every few hours, downloads in the background, and installs
-// when it quits. An update that's ready within a minute of launch is installed right away,
-// so closing and reopening the app is enough to get the latest version.
+// The app checks at launch and every few hours and downloads new versions in the background, but
+// never installs one without asking: each time the app is opened (launched, or opened again from
+// the Start menu / desktop while it's running in the tray) and a newer version is there, a dialog
+// asks whether to update now. "Not now" leaves the current version in place until the next time.
+// Switching between the editor and the overlay doesn't count as opening the app.
+let askOnOpen = true;          // the app was just opened: ask about an update this time
+let asking = false;
+let userWantsUpdate = false;   // said yes while the download was still going
+let updateNotes = '';
 function sendUpdate(status) {
   const changed = status.state !== updateStatus.state || status.version !== updateStatus.version;
   updateStatus = status;
@@ -477,24 +483,63 @@ function shortErr(e) {
 // A failed check tries again after 2 minutes (up to 5 times) instead of waiting for the 4-hour check.
 let retryTimer = null, retries = 0;
 function updateFailed(e) {
+  if (userWantsUpdate) { // the download they asked for failed: bring the app back and say so
+    userWantsUpdate = false;
+    closeUpdateScreen();
+    showWindow();
+    if (!TEST_HIDDEN) dialog.showMessageBox(win, { type: 'warning', title: 'Update failed', message: "The update couldn't be downloaded.", detail: shortErr(e) + '\n\nYou can try again from Settings → Updates.' }).catch(() => {});
+  }
+  askOnOpen = false;
   if (updateStatus.state === 'ready') return;
   const retrying = retries < 5;
   sendUpdate({ state: 'error', message: shortErr(e) + (retrying ? ' — trying again in 2 minutes' : '') });
   if (retrying && !retryTimer) retryTimer = setTimeout(() => { retryTimer = null; retries++; checkForUpdates(); }, 2 * 60 * 1000);
 }
+// Dev-only: LN_TEST_FAKE_UPDATE=<version> pretends that version is on GitHub (with LN_TEST_HIDDEN).
+function fakeUpdater(version) {
+  const u = new (require('events'))();
+  u.checkForUpdates = async () => {
+    u.emit('checking-for-update');
+    setTimeout(() => {
+      u.emit('update-available', { version, releaseNotes: '<ul><li>Test change one</li><li>Test change two</li></ul>' });
+      let pct = 0;
+      const t = setInterval(() => {
+        pct += 25;
+        u.emit('download-progress', { percent: pct });
+        if (pct >= 100) { clearInterval(t); u.emit('update-downloaded', { version }); }
+      }, 300);
+    }, 200);
+  };
+  u.quitAndInstall = () => { testLog('quitAndInstall ' + version); app.exit(0); };
+  return u;
+}
+function testLog(msg) {
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'test-updates.log'), msg + '\n'); } catch {}
+}
 function setupUpdater() {
-  if (!app.isPackaged) return;
-  try { updater = require('electron-updater').autoUpdater; } catch (e) { console.error('updater unavailable', e); return; }
+  const fake = TEST_HIDDEN && process.env.LN_TEST_FAKE_UPDATE;
+  if (fake) updater = fakeUpdater(fake);
+  else {
+    if (!app.isPackaged) return;
+    try { updater = require('electron-updater').autoUpdater; } catch (e) { console.error('updater unavailable', e); return; }
+  }
   updater.autoDownload = true;
-  updater.autoInstallOnAppQuit = true;
+  updater.autoInstallOnAppQuit = false; // only ever installed after the user says yes
   updater.on('checking-for-update', () => sendUpdate({ state: 'checking' }));
-  updater.on('update-not-available', () => { retries = 0; sendUpdate({ state: 'none' }); });
-  updater.on('update-available', (i) => sendUpdate({ state: 'downloading', version: i.version, percent: 0 }));
-  updater.on('download-progress', (p) => sendUpdate({ state: 'downloading', version: updateStatus.version, percent: p.percent }));
-  updater.on('update-downloaded', (i) => sendUpdate({
-    state: 'ready', version: i.version,
-    auto: Date.now() - launchedAt < 60000 && settings.lastAutoUpdate !== i.version
-  }));
+  updater.on('update-not-available', () => { retries = 0; askOnOpen = false; sendUpdate({ state: 'none' }); });
+  updater.on('update-available', (i) => {
+    sendUpdate({ state: 'downloading', version: i.version, percent: 0 });
+    askAboutUpdate(i);
+  });
+  updater.on('download-progress', (p) => {
+    sendUpdate({ state: 'downloading', version: updateStatus.version, percent: p.percent });
+    setUpdateScreen('downloading', p.percent);
+  });
+  updater.on('update-downloaded', (i) => {
+    sendUpdate({ state: 'ready', version: i.version });
+    if (userWantsUpdate) requestInstall();
+    else askAboutUpdate(i);
+  });
   updater.on('error', updateFailed);
   setTimeout(checkForUpdates, 3000);
   setInterval(checkForUpdates, 4 * 60 * 60 * 1000);
@@ -505,6 +550,55 @@ async function checkForUpdates() {
   try { await updater.checkForUpdates(); } catch (e) { updateFailed(e); }
   return updateStatus;
 }
+// The app was opened again while already running (Start menu, desktop, taskbar pin).
+function appOpenedAgain() {
+  askOnOpen = true;
+  if (['downloading', 'ready'].includes(updateStatus.state)) askAboutUpdate({ version: updateStatus.version });
+  else if (updateStatus.state !== 'checking') checkForUpdates();
+}
+const plainNotes = (html) => String(html || '')
+  .replace(/<li[^>]*>/gi, '• ').replace(/<\/(p|li|h\d)>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
+  .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  .replace(/\*\*/g, '').replace(/\n{3,}/g, '\n\n').trim();
+async function askAboutUpdate(info) {
+  if (info && info.releaseNotes) updateNotes = Array.isArray(info.releaseNotes) ? info.releaseNotes.map(n => n.note).join('\n') : info.releaseNotes;
+  if (!askOnOpen || asking || userWantsUpdate || !updater) return;
+  askOnOpen = false;
+  asking = true;
+  const v = (info && info.version) || updateStatus.version;
+  let notes = plainNotes(updateNotes).split('\n').filter(l => !/^Interview Notes \d|Download:|Already installed\?/.test(l)).join('\n').trim();
+  if (notes.length > 700) notes = notes.slice(0, 700) + '…';
+  const opts = {
+    type: 'info', title: 'Update available', noLink: true, defaultId: 0, cancelId: 1,
+    buttons: ['Update now', 'Not now'],
+    message: `Interview Notes ${v} is available`,
+    detail: `You have version ${app.getVersion()}.` + (notes ? `\n\nWhat's new:\n${notes}` : '') +
+      "\n\nUpdating closes the app for a few seconds and reopens it. Your notes are saved first. " +
+      "If you choose Not now, you'll be asked again the next time you open the app."
+  };
+  let response = 1;
+  try {
+    if (TEST_HIDDEN) { response = +(process.env.LN_TEST_UPDATE_ANSWER || 1); testLog('asked ' + v + ' -> ' + (response === 0 ? 'update' : 'not now')); }
+    else {
+      const parent = win && !win.isDestroyed() && win.isVisible() && settings.mode === 'editor' ? win : undefined;
+      response = (await (parent ? dialog.showMessageBox(parent, opts) : dialog.showMessageBox(opts))).response;
+    }
+  } finally { asking = false; }
+  if (response !== 0) return; // not now: nothing is installed
+  userWantsUpdate = true;
+  if (updateStatus.state === 'ready') requestInstall();
+  else { // still downloading: show the progress, install when it's done
+    showUpdateScreen(v);
+    setUpdateScreen('downloading', updateStatus.percent);
+    hideToast();
+    if (win && !win.isDestroyed()) win.hide();
+  }
+}
+// Let the page save the open document, then install. (Fallback if it doesn't answer.)
+function requestInstall() {
+  if (win && !win.isDestroyed()) win.webContents.send('cmd', 'installUpdate');
+  setTimeout(installUpdate, 4000);
+}
 // Installing closes the app for a few seconds, so say so first: the app window goes away and a
 // small "Updating Interview Notes" screen explains that it will reopen by itself. Then the
 // installer's own progress window takes over until the new version opens.
@@ -514,9 +608,11 @@ function installUpdate() {
   saveSettingsNow();
   updateStatus = { ...updateStatus, state: 'installing' };
   quitting = true;
-  showUpdateScreen(updateStatus.version);
+  if (!updateWin || updateWin.isDestroyed()) showUpdateScreen(updateStatus.version);
+  setUpdateScreen('installing');
   hideToast();
   if (win && !win.isDestroyed()) win.hide();
+  testLog('installing ' + updateStatus.version);
   setTimeout(() => updater.quitAndInstall(false, true), 2500); // installer with its progress bar, then reopen the app
 }
 let updateWin = null;
@@ -533,16 +629,34 @@ function showUpdateScreen(version) {
     .bar{height:100%;width:35%;border-radius:2px;background:${c.bar};animation:m 1.3s ease-in-out infinite}
     @keyframes m{0%{transform:translateX(-100%)}100%{transform:translateX(290%)}}
   </style><h1>Updating Interview Notes</h1>
-  <p>Installing version ${String(version).replace(/[<&]/g, '')}. The app will close and reopen by itself in a few seconds &mdash; you don&rsquo;t need to do anything.</p>
+  <p id="msg">Installing version ${String(version).replace(/[<&]/g, '')}. The app will close and reopen by itself in a few seconds &mdash; you don&rsquo;t need to do anything.</p>
   <div class="track"><div class="bar"></div></div><p>Your notes are saved.</p>`;
+  updateVersion = String(version).replace(/[<&]/g, '');
   updateWin = new BrowserWindow({
     width: 440, height: 200, show: false, frame: false, resizable: false, movable: true, minimizable: false,
     maximizable: false, alwaysOnTop: true, skipTaskbar: false, center: true, title: 'Updating Interview Notes',
     backgroundColor: c.bg, icon: path.join(__dirname, 'build', 'icon.png'),
-    webPreferences: { contextIsolation: true, sandbox: true, javascript: false }
+    webPreferences: { contextIsolation: true, sandbox: true }
   });
   updateWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html)).catch(() => {});
-  updateWin.once('ready-to-show', () => updateWin && !updateWin.isDestroyed() && updateWin.show());
+  updateWinReady = new Promise(res => updateWin.once('ready-to-show', () => {
+    if (updateWin && !updateWin.isDestroyed()) updateWin.show();
+    res();
+  }));
+}
+let updateWinReady = null, updateVersion = '';
+async function setUpdateScreen(phase, percent) {
+  if (!updateWin || updateWin.isDestroyed()) return;
+  await updateWinReady;
+  if (!updateWin || updateWin.isDestroyed()) return;
+  const text = phase === 'downloading'
+    ? `Downloading version ${updateVersion}${percent != null ? ' — ' + Math.round(percent) + '%' : '…'}. Interview Notes will then close and reopen by itself.`
+    : `Installing version ${updateVersion}. The app will close and reopen by itself in a few seconds \u2014 you don\u2019t need to do anything.`;
+  updateWin.webContents.executeJavaScript(`document.getElementById('msg').textContent = ${JSON.stringify(text)}`).catch(() => {});
+}
+function closeUpdateScreen() {
+  if (updateWin && !updateWin.isDestroyed()) updateWin.destroy();
+  updateWin = null;
 }
 
 /* ---------------- context menu (spelling, table, image) ---------------- */
@@ -905,7 +1019,7 @@ async function renderOffscreen(title, body, pageCss, fn) {
 }
 
 /* ---------------- lifecycle ---------------- */
-app.on('second-instance', showWindow);
+app.on('second-instance', () => { showWindow(); appOpenedAgain(); });
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   nativeTheme.themeSource = settings.theme;

@@ -94,7 +94,6 @@
   let fullscreen = false;
   let lastImmOpts = "";
   let refreshingSettings = false;
-  const SHORTCUT_KEYS = ["toggleShortcut", "immersiveShortcut", "linesShortcut", "opacityShortcut", "headingPrevShortcut", "headingNextShortcut", "recenterShortcut"];
   let update = { state: "idle" };
   const IMM_PAD = {
     none: [4, 3],
@@ -176,6 +175,7 @@
   async function setSetting(patch, quiet) {
     Object.assign(S, patch);
     applySettings();
+    if ("keys" in patch) rebuildKeys();
     if (quiet) {
       saveSettingsSoon(patch);
       return;
@@ -281,10 +281,12 @@
     );
   }
   function prettyAccel(a) {
+    const names = { numadd: "Num +", numsub: "Num −", nummult: "Num *", numdiv: "Num /", numdec: "Num .", Escape: "Esc", Super: "Win" };
     return (a || "")
       .replace(/CommandOrControl|CmdOrCtrl/g, "Ctrl")
-      .replace(/\+/g, " + ")
-      .replace(/Super/g, "Win");
+      .split("+")
+      .map((p) => names[p] || p.replace(/^num(\d)$/, "Num $1"))
+      .join(" + ");
   }
 
   /* ---------------- document state ---------------- */
@@ -1769,13 +1771,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   /* ---------------- menus ---------------- */
   const MENUS = {
     file: () => [
-      { id: "new", label: "New document", accel: "CmdOrCtrl+N" },
+      { id: "new", label: "New document", accel: acc("new") },
       { id: "newFolder", label: "New folder" },
-      { id: "docs", label: "Open… (document list)", accel: "CmdOrCtrl+O" },
+      { id: "docs", label: "Open… (document list)", accel: acc("docs") },
       { type: "separator" },
       { id: "import", label: "Import .docx / .html / .txt…" },
-      { id: "print", label: "Print…", accel: "CmdOrCtrl+P" },
-      { id: "export:pdf", label: "Download as PDF" },
+      { id: "print", label: "Print…", accel: acc("print") },
+      { id: "export:pdf", label: "Download as PDF", accel: acc("export:pdf") },
       {
         label: "Download as…",
         submenu: [
@@ -1790,11 +1792,11 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       { id: "reveal", label: "Show in File Explorer" },
       { type: "separator" },
       { id: "hide", label: "Hide window", accel: S.toggleShortcut },
-      { id: "quit", label: "Quit", accel: "CmdOrCtrl+Q" },
+      { id: "quit", label: "Quit", accel: acc("quit") },
     ],
     edit: () => [
-      { id: "undo", label: "Undo", accel: "CmdOrCtrl+Z" },
-      { id: "redo", label: "Redo", accel: "CmdOrCtrl+Y" },
+      { id: "undo", label: "Undo", accel: acc("undo") },
+      { id: "redo", label: "Redo", accel: acc("redo") },
       { type: "separator" },
       { id: "cut", label: "Cut", accel: "CmdOrCtrl+X" },
       { id: "copy", label: "Copy", accel: "CmdOrCtrl+C" },
@@ -1802,13 +1804,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       {
         id: "pastePlain",
         label: "Paste without formatting",
-        accel: "CmdOrCtrl+Shift+V",
+        accel: acc("pastePlain"),
       },
       { type: "separator" },
       { id: "selectAll", label: "Select all", accel: "CmdOrCtrl+A" },
       { id: "delSel", label: "Delete" },
       { type: "separator" },
-      { id: "find", label: "Find and replace", accel: "CmdOrCtrl+H" },
+      { id: "find", label: "Find and replace", accel: acc("find") },
     ],
     view: () => [
       { id: "immersive", label: "Immersive mode", accel: S.immersiveShortcut },
@@ -1816,15 +1818,15 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       {
         id: "fullscreen",
         label: "Full screen",
-        accel: "F11",
+        accel: acc("fullscreen"),
         checked: fullscreen,
       },
       {
         label: "Zoom",
         submenu: [
-          { id: "zoom:in", label: "Zoom in", accel: "CmdOrCtrl+=" },
-          { id: "zoom:out", label: "Zoom out", accel: "CmdOrCtrl+-" },
-          { id: "zoom:1", label: "Actual size (100%)", accel: "CmdOrCtrl+0" },
+          { id: "zoom:in", label: "Zoom in", accel: acc("zoom:in") },
+          { id: "zoom:out", label: "Zoom out", accel: acc("zoom:out") },
+          { id: "zoom:1", label: "Actual size (100%)", accel: acc("zoom:1") },
           { type: "separator" },
         ].concat(
           ["fit", ...ZOOMS.map(String)].map((z) => ({
@@ -1883,9 +1885,9 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     insert: () => [
       { id: "image", label: "Image…" },
       { id: "table", label: "Table" },
-      { id: "link", label: "Link", accel: "CmdOrCtrl+K" },
+      { id: "link", label: "Link", accel: acc("link") },
       { id: "hr", label: "Horizontal line" },
-      { id: "pageBreak", label: "Page break", accel: "CmdOrCtrl+Enter" },
+      { id: "pageBreak", label: "Page break", accel: acc("pageBreak") },
       { id: "date", label: "Date" },
       { id: "checklist", label: "Checklist" },
     ],
@@ -1893,22 +1895,22 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       {
         label: "Text",
         submenu: [
-          { id: "bold", label: "Bold", accel: "CmdOrCtrl+B" },
-          { id: "italic", label: "Italic", accel: "CmdOrCtrl+I" },
-          { id: "underline", label: "Underline", accel: "CmdOrCtrl+U" },
-          { id: "strikeThrough", label: "Strikethrough", accel: "Alt+Shift+5" },
-          { id: "superscript", label: "Superscript", accel: "CmdOrCtrl+." },
-          { id: "subscript", label: "Subscript", accel: "CmdOrCtrl+," },
+          { id: "bold", label: "Bold", accel: acc("bold") },
+          { id: "italic", label: "Italic", accel: acc("italic") },
+          { id: "underline", label: "Underline", accel: acc("underline") },
+          { id: "strikeThrough", label: "Strikethrough", accel: acc("strikeThrough") },
+          { id: "superscript", label: "Superscript", accel: acc("superscript") },
+          { id: "subscript", label: "Subscript", accel: acc("subscript") },
           { type: "separator" },
           {
             id: "fontUp",
             label: "Increase font size",
-            accel: "CmdOrCtrl+Shift+.",
+            accel: acc("fontUp"),
           },
           {
             id: "fontDown",
             label: "Decrease font size",
-            accel: "CmdOrCtrl+Shift+,",
+            accel: acc("fontDown"),
           },
         ],
       },
@@ -1922,15 +1924,15 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
           ["h2", "Heading 2", "CmdOrCtrl+Alt+2"],
           ["h3", "Heading 3", "CmdOrCtrl+Alt+3"],
           ["h4", "Heading 4", "CmdOrCtrl+Alt+4"],
-        ].map(([v, l, a]) => ({ id: "style:" + v, label: l, accel: a })),
+        ].map(([v, l]) => ({ id: "style:" + v, label: l, accel: acc("style:" + v) })),
       },
       {
         label: "Align & indent",
         submenu: [
-          { id: "justifyLeft", label: "Left", accel: "CmdOrCtrl+Shift+L" },
-          { id: "justifyCenter", label: "Center", accel: "CmdOrCtrl+Shift+E" },
-          { id: "justifyRight", label: "Right", accel: "CmdOrCtrl+Shift+R" },
-          { id: "justifyFull", label: "Justified", accel: "CmdOrCtrl+Shift+J" },
+          { id: "justifyLeft", label: "Left", accel: acc("justifyLeft") },
+          { id: "justifyCenter", label: "Center", accel: acc("justifyCenter") },
+          { id: "justifyRight", label: "Right", accel: acc("justifyRight") },
+          { id: "justifyFull", label: "Justified", accel: acc("justifyFull") },
           { type: "separator" },
           { id: "indent", label: "Increase indent" },
           { id: "outdent", label: "Decrease indent" },
@@ -1957,21 +1959,21 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
           {
             id: "insertUnorderedList",
             label: "Bulleted list",
-            accel: "CmdOrCtrl+Shift+8",
+            accel: acc("insertUnorderedList"),
           },
           {
             id: "insertOrderedList",
             label: "Numbered list",
-            accel: "CmdOrCtrl+Shift+7",
+            accel: acc("insertOrderedList"),
           },
-          { id: "checklist", label: "Checklist", accel: "CmdOrCtrl+Shift+9" },
+          { id: "checklist", label: "Checklist", accel: acc("checklist") },
         ],
       },
       { type: "separator" },
-      { id: "clearFormat", label: "Clear formatting", accel: "CmdOrCtrl+\\" },
+      { id: "clearFormat", label: "Clear formatting", accel: acc("clearFormat") },
     ],
     tools: () => [
-      { id: "wordCount", label: "Word count", accel: "CmdOrCtrl+Shift+C" },
+      { id: "wordCount", label: "Word count", accel: acc("wordCount") },
       { id: "spell", label: "Spell check", checked: ed.spellcheck },
       { type: "separator" },
       {
@@ -1981,7 +1983,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
             ? `Restart to update (v${update.version})`
             : "Check for updates",
       },
-      { id: "settings", label: "Settings", accel: "CmdOrCtrl+," },
+      { id: "settings", label: "Settings", accel: acc("settings") },
     ],
   };
   $$("#menubar [data-menu]").forEach((btn) => {
@@ -2068,6 +2070,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return api.call("win:fullscreen", !fullscreen);
       case "update":
         return update.state === "ready" ? installUpdate() : checkForUpdates();
+      case "installUpdate": // you said "Update now" in the update dialog
+        return installUpdate();
       case "lines":
         return setSetting({ linesPerView: +arg });
       case "cycleLines":
@@ -2445,6 +2449,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     $$(".shortcut:not(.rec)").forEach(
       (i) => (i.value = prettyAccel(S[i.dataset.setting])),
     );
+    if (!keyRecorder) renderKeyRows();
     $("#set-folder").textContent = S.docsFolder;
     $("#set-folder").title = S.docsFolder;
     $("#set-version").textContent = `Interview Notes ${S.version || ""}`;
@@ -2468,7 +2473,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   $("#btn-export").onclick = async () => {
     const r = $("#btn-export").getBoundingClientRect();
     const id = await api.call("menu:popup", [
-      { id: "print", label: "Print…", accel: "CmdOrCtrl+P" },
+      { id: "print", label: "Print…", accel: acc("print") },
       { type: "separator" },
       { id: "export:pdf", label: "Download as PDF (.pdf)" },
       { id: "export:docx", label: "Download as Word (.docx)" },
@@ -2533,7 +2538,11 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       recenterShortcut: "CommandOrControl+Alt+0",
       anywhereScroll: "alt",
       headingScroll: "ctrl+alt",
-    }).then(fillSettings);
+      keys: {},
+    }).then(() => {
+      rebuildKeys();
+      fillSettings();
+    });
 
   // lines shown at a time: 1 / 2 / custom (1–25) / default 25
   const linesSeg = $("#lines-seg"),
@@ -2594,6 +2603,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     Insert: "Insert",
     Delete: "Delete",
     Backspace: "Backspace",
+    Escape: "Escape",
+    NumpadAdd: "numadd",
+    NumpadSubtract: "numsub",
+    NumpadMultiply: "nummult",
+    NumpadDivide: "numdiv",
+    NumpadDecimal: "numdec",
+    NumpadEnter: "Enter",
   };
   function keyName(code) {
     if (/^Key[A-Z]$/.test(code)) return code.slice(3);
@@ -2632,11 +2648,10 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return;
       }
       const accel = [...mods, k].join("+");
-      const taken = SHORTCUT_KEYS
-        .filter((k) => k !== inp.dataset.setting)
-        .some((k) => S[k] === accel);
-      if (taken) {
-        inp.value = "Already used by another shortcut";
+      const g = GLOBAL_KEYS.find((x) => x[0] === inp.dataset.setting);
+      const owner = RESERVED[accel] || keyOwner(accel, scopesOf(g ? g[2] : "both"), inp.dataset.setting);
+      if (owner) {
+        inp.value = `Used by “${owner}”`;
         return;
       }
       inp.classList.remove("rec");
@@ -2653,7 +2668,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     fullscreen = !!on;
     document.body.classList.toggle("fullscreen", fullscreen);
     const b = $("#btn-fullscreen");
-    b.title = fullscreen ? "Exit full screen (F11)" : "Full screen (F11)";
+    b.dataset.base = fullscreen ? "Exit full screen" : "Full screen";
+    refreshKeyHints();
     b.innerHTML = icon(fullscreen ? "fullscreenExit" : "fullscreen");
     applyZoom();
   }
@@ -2661,14 +2677,14 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
 
   /* ---------------- updates ---------------- */
   const UPDATE_TEXT = {
-    idle: () => "Updates install automatically when you restart the app.",
+    idle: () => "When there's a new version, you're asked whether to install it each time you open the app.",
     dev: () => "Updates only work in the installed app.",
     checking: () => "Checking for updates…",
     none: () => `You're on the latest version (${S.version}).`,
     downloading: (u) =>
       `Downloading version ${u.version}… ${u.percent != null ? Math.round(u.percent) + "%" : ""}`,
     ready: (u) =>
-      `Version ${u.version} is ready — it installs when you restart.`,
+      `Version ${u.version} is ready to install — click Restart & update now, or you'll be asked next time you open the app.`,
     installing: (u) => `Installing version ${u.version}…`,
     error: (u) =>
       `Couldn't check for updates${u.message ? ": " + u.message : ""}`,
@@ -2704,143 +2720,312 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   $("#set-update").onclick = () => run("update");
   $("#btn-update").onclick = installUpdate;
 
-  /* ---------------- keyboard ---------------- */
+  /* ---------------- keyboard shortcuts ---------------- */
+  // Every in-app shortcut, changeable in Settings → Keyboard shortcuts (the ones that work from any
+  // app are the separate *Shortcut settings above, registered by the main process).
+  // scope: "editor" | "overlay" | "both". repeat: keeps firing while the keys are held.
+  // Changed ones are saved in S.keys as { id: [accelerators] }.
+  const C = "CommandOrControl+";
+  const APP_KEYS = [
+    ["File", "new", "New document", [C + "N"]],
+    ["File", "docs", "Document list", [C + "O"]],
+    ["File", "save", "Save now", [C + "S"]],
+    ["File", "print", "Print", [C + "P"]],
+    ["File", "export:pdf", "Download as PDF", []],
+    ["File", "export:docx", "Download as Word", []],
+    ["File", "settings", "Settings", [C + ","], "both"],
+    ["File", "quit", "Quit", [C + "Q"], "both"],
+    ["Edit", "undo", "Undo", [C + "Z"], "editor", true],
+    ["Edit", "redo", "Redo", [C + "Y", C + "Shift+Z"], "editor", true],
+    ["Edit", "pastePlain", "Paste without formatting", [C + "Shift+V"]],
+    ["Edit", "findOnly", "Find", [C + "F"]],
+    ["Edit", "find", "Find and replace", [C + "H"]],
+    ["View", "fullscreen", "Full screen", ["F11"]],
+    ["View", "zoom:in", "Zoom in", [C + "=", C + "Shift+=", C + "numadd"], "editor", true],
+    ["View", "zoom:out", "Zoom out", [C + "-", C + "numsub"], "editor", true],
+    ["View", "zoom:1", "Zoom to 100%", [C + "0", C + "num0"]],
+    ["View", "docsToggle", "Show / hide the document list", []],
+    ["Insert", "link", "Link", [C + "K"]],
+    ["Insert", "pageBreak", "Page break", [C + "Enter"]],
+    ["Insert", "image", "Image", []],
+    ["Insert", "hr", "Horizontal line", []],
+    ["Insert", "date", "Today's date", []],
+    ["Format", "bold", "Bold", [C + "B"]],
+    ["Format", "italic", "Italic", [C + "I"]],
+    ["Format", "underline", "Underline", [C + "U"]],
+    ["Format", "strikeThrough", "Strikethrough", ["Alt+Shift+5"]],
+    ["Format", "superscript", "Superscript", [C + "."]],
+    ["Format", "subscript", "Subscript", []],
+    ["Format", "fontUp", "Bigger text", [C + "Shift+."], "editor", true],
+    ["Format", "fontDown", "Smaller text", [C + "Shift+,"], "editor", true],
+    ["Format", "clearFormat", "Clear formatting", [C + "\\"]],
+    ["Format", "style:p", "Normal text", [C + "Alt+0"]],
+    ["Format", "style:title", "Title", []],
+    ["Format", "style:subtitle", "Subtitle", []],
+    ["Format", "style:h1", "Heading 1", [C + "Alt+1"]],
+    ["Format", "style:h2", "Heading 2", [C + "Alt+2"]],
+    ["Format", "style:h3", "Heading 3", [C + "Alt+3"]],
+    ["Format", "style:h4", "Heading 4", [C + "Alt+4"]],
+    ["Format", "justifyLeft", "Align left", [C + "Shift+L"]],
+    ["Format", "justifyCenter", "Align center", [C + "Shift+E"]],
+    ["Format", "justifyRight", "Align right", [C + "Shift+R"]],
+    ["Format", "justifyFull", "Justify", [C + "Shift+J"]],
+    ["Format", "insertOrderedList", "Numbered list", [C + "Shift+7"]],
+    ["Format", "insertUnorderedList", "Bulleted list", [C + "Shift+8"]],
+    ["Format", "checklist", "Checklist", [C + "Shift+9"]],
+    ["Format", "indent", "Increase indent", []],
+    ["Format", "outdent", "Decrease indent", []],
+    ["Tools", "wordCount", "Word count", [C + "Shift+C"]],
+    ["Tools", "spell", "Spell check on / off", []],
+    ["Overlay", "imm:next", "Next line(s)", ["Down", "Right", "Space", "Enter", "J"], "overlay", true],
+    ["Overlay", "imm:prev", "Previous line(s)", ["Up", "Left", "Backspace", "K"], "overlay", true],
+    ["Overlay", "imm:nextBig", "Jump further down", ["PageDown"], "overlay", true],
+    ["Overlay", "imm:prevBig", "Jump further up", ["PageUp"], "overlay", true],
+    ["Overlay", "imm:home", "Back to the start", ["Home"], "overlay"],
+    ["Overlay", "imm:end", "Go to the end", ["End"], "overlay"],
+    ["Overlay", "imm:bigger", "Bigger text", [C + "=", C + "Shift+=", C + "numadd"], "overlay", true],
+    ["Overlay", "imm:smaller", "Smaller text", [C + "-", C + "numsub"], "overlay", true],
+    ["Overlay", "imm:exit", "Back to the editor", ["Escape"], "overlay"],
+  ].map(([group, id, label, keys, scope = "editor", repeat = false]) => ({ group, id, label, keys, scope, repeat }));
+  const APP_KEY = Object.fromEntries(APP_KEYS.map((c) => [c.id, c]));
+  // shortcuts that work from any app (main process) — and where they also apply
+  const GLOBAL_KEYS = [
+    ["toggleShortcut", "Show / hide Interview Notes", "both"],
+    ["immersiveShortcut", "Switch editor ↔ overlay", "both"],
+    ["linesShortcut", "Change lines shown", "both"],
+    ["opacityShortcut", "Change overlay opacity", "both"],
+    ["headingPrevShortcut", "Previous heading", "both"],
+    ["headingNextShortcut", "Next heading", "both"],
+    ["recenterShortcut", "Recenter the overlay", "overlay"],
+  ];
+  // kept for typing and the clipboard — never offered as a shortcut
+  const RESERVED = {
+    [C + "C"]: "copy", [C + "V"]: "paste", [C + "X"]: "cut", [C + "A"]: "select all",
+    Tab: "indenting lists", "Shift+Tab": "indenting lists",
+  };
+
+  const keysFor = (id) => ((S.keys || {})[id] !== undefined ? S.keys[id] : APP_KEY[id] ? APP_KEY[id].keys : []);
+  const acc = (id) => keysFor(id)[0]; // shown next to menu items
+  const scopesOf = (scope) => (scope === "both" ? ["editor", "overlay"] : [scope]);
+  let keyIndex = new Map(); // "scope|accelerator" → command
+  function rebuildKeys() {
+    keyIndex = new Map();
+    for (const c of APP_KEYS)
+      for (const a of keysFor(c.id))
+        for (const sc of scopesOf(c.scope)) if (!keyIndex.has(sc + "|" + a)) keyIndex.set(sc + "|" + a, c);
+    refreshKeyHints();
+  }
+  // the accelerator a key press stands for, in the same format as the settings
+  function accelOf(e) {
+    const k = keyName(e.code);
+    if (!k) return null;
+    const mods = [];
+    if (e.ctrlKey) mods.push("CommandOrControl");
+    if (e.altKey) mods.push("Alt");
+    if (e.shiftKey) mods.push("Shift");
+    if (e.metaKey) mods.push("Super");
+    return [...mods, k].join("+");
+  }
+  // who already uses an accelerator in a scope: a label, or null
+  function keyOwner(accel, scopes, exceptId) {
+    for (const [k, label, sc] of GLOBAL_KEYS)
+      if (k !== exceptId && S[k] === accel && scopesOf(sc).some((x) => scopes.includes(x))) return label;
+    for (const c of APP_KEYS)
+      if (c.id !== exceptId && keysFor(c.id).includes(accel) && scopesOf(c.scope).some((x) => scopes.includes(x)))
+        return (c.group === "Overlay" ? "Overlay: " : "") + c.label;
+    return null;
+  }
+  function runKey(id) {
+    switch (id) {
+      case "save":
+        cur.dirty = true;
+        return saveNow().then(() => toast("Saved", 1200));
+      case "findOnly":
+        return openFind(false);
+      case "docsToggle":
+        return toggleSidebar();
+      case "imm:next":
+        return Immersive.go(1);
+      case "imm:prev":
+        return Immersive.go(-1);
+      case "imm:nextBig":
+        return Immersive.go(1, true);
+      case "imm:prevBig":
+        return Immersive.go(-1, true);
+      case "imm:home":
+        return Immersive.home();
+      case "imm:end":
+        return Immersive.end();
+      case "imm:bigger":
+        return zoomBy(0.1);
+      case "imm:smaller":
+        return zoomBy(-0.1);
+      case "imm:exit":
+        return setMode("editor");
+      case "pastePlain":
+        return run("pastePlain");
+    }
+    return run(id);
+  }
+  // Runs before the editor sees the key, so a shortcut always wins over typing and a key you
+  // removed from a command really does nothing.
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (keyRecorder || !back.hidden) return; // recording a shortcut, or a dialog is open
+      const a = accelOf(e);
+      if (!a) return;
+      const c = keyIndex.get((S.mode === "immersive" ? "overlay" : "editor") + "|" + a);
+      if (!c) return;
+      const t = e.target;
+      if (t && t.matches && t.matches("input, textarea, select")) {
+        // in a text box (title, find, font size…) its own editing keys win
+        if (["Edit", "Format", "Insert"].includes(c.group) && c.id !== "findOnly" && c.id !== "find") return;
+        if (!/CommandOrControl|Alt|Super|^F\d/.test(a)) return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat && !c.repeat) return;
+      runKey(c.id);
+    },
+    true,
+  );
+  // Keys that aren't commands: Esc closes things, and the from-any-app shortcuts when they reach the window.
   document.addEventListener("keydown", (e) => {
-    const ctrl = e.ctrlKey || e.metaKey;
-    if (S.mode === "immersive") {
-      const k = e.key;
-      if (matchesAccel(e, S.headingPrevShortcut) || matchesAccel(e, S.headingNextShortcut)) {
-        e.preventDefault();
-        return jumpHeading(matchesAccel(e, S.headingPrevShortcut) ? -1 : 1);
-      }
-      if (matchesAccel(e, S.opacityShortcut)) {
-        e.preventDefault();
-        return cycleOpacity();
-      }
-      if (matchesAccel(e, S.recenterShortcut)) {
-        e.preventDefault();
-        return api.call("win:recenter");
-      }
-      if (
-        ["ArrowDown", "ArrowRight", "PageDown", " ", "j", "Enter"].includes(k)
-      ) {
-        e.preventDefault();
-        Immersive.go(1, k === "PageDown");
-      } else if (
-        ["ArrowUp", "ArrowLeft", "PageUp", "k", "Backspace"].includes(k)
-      ) {
-        e.preventDefault();
-        Immersive.go(-1, k === "PageUp");
-      } else if (k === "Home") Immersive.home();
-      else if (k === "End") Immersive.end();
-      else if (k === "Escape") setMode("editor");
-      else if (ctrl && (k === "=" || k === "+")) {
-        e.preventDefault();
-        zoomBy(0.1);
-      } else if (ctrl && k === "-") {
-        e.preventDefault();
-        zoomBy(-0.1);
-      } else if (ctrl && k.toLowerCase() === "q") run("quit");
-      return;
-    }
-    if (!back.hidden) return;
-    // the editor handled it already (Ctrl+B, Ctrl+Z, Ctrl+Shift+8, Ctrl+Alt+1, …)
-    if (e.defaultPrevented) return;
-    if (e.key === "F11") {
-      e.preventDefault();
-      return run("fullscreen");
-    }
-    if (e.key === "Escape") {
-      if (!pop.hidden) hidePopover();
-      else if (findOpen) closeFind();
-      else if (selImg) deselectImage();
-      else if (fullscreen) run("fullscreen");
-      return;
-    }
-    if (e.altKey && e.shiftKey && e.code === "Digit5") {
-      e.preventDefault();
-      return exec("strikeThrough");
-    }
-    // in the editor the heading keys are handled here (they're only global while the overlay shows)
+    if (e.defaultPrevented || keyRecorder) return;
     if (matchesAccel(e, S.headingPrevShortcut) || matchesAccel(e, S.headingNextShortcut)) {
       e.preventDefault();
-      return run(matchesAccel(e, S.headingPrevShortcut) ? "heading:prev" : "heading:next");
+      return jumpHeading(matchesAccel(e, S.headingPrevShortcut) ? -1 : 1);
     }
     if (matchesAccel(e, S.opacityShortcut)) {
       e.preventDefault();
       return cycleOpacity();
     }
-    if (!ctrl) return;
-    const code = e.code,
-      sh = e.shiftKey,
-      alt = e.altKey;
-    const go = (id) => {
-      e.preventDefault();
-      run(id);
-    };
-    if (ctrl && alt && /^Digit[0-4]$/.test(code))
-      return go("style:" + (code === "Digit0" ? "p" : "h" + code.slice(5)));
-    if (alt) return;
-    if (sh) {
-      if (code === "Digit7") return go("insertOrderedList");
-      if (code === "Digit8") return go("insertUnorderedList");
-      if (code === "Digit9") return go("checklist");
-      if (code === "KeyL") return go("justifyLeft");
-      if (code === "KeyE") return go("justifyCenter");
-      if (code === "KeyR") return go("justifyRight");
-      if (code === "KeyJ") return go("justifyFull");
-      if (code === "Period") return go("fontUp");
-      if (code === "Comma") return go("fontDown");
-      if (code === "KeyC") return go("wordCount");
-      if (code === "KeyV") {
-        plainNext = true;
-        setTimeout(() => (plainNext = false), 600);
-        return;
+    if (S.mode === "immersive") {
+      if (matchesAccel(e, S.recenterShortcut)) {
+        e.preventDefault();
+        api.call("win:recenter");
       }
-      if (code === "KeyZ") return go("redo");
-      if (code === "Equal") return go("zoom:in");
       return;
     }
-    switch (code) {
-      case "Equal":
-      case "NumpadAdd":
-        return go("zoom:in");
-      case "Minus":
-      case "NumpadSubtract":
-        return go("zoom:out");
-      case "Digit0":
-      case "Numpad0":
-        return go("zoom:1");
-      case "KeyS":
-        e.preventDefault();
-        cur.dirty = true;
-        saveNow().then(() => toast("Saved", 1200));
-        return;
-      case "KeyN":
-        return go("new");
-      case "KeyO":
-        return go("docs");
-      case "KeyF":
-        e.preventDefault();
-        return openFind(false);
-      case "KeyH":
-        return go("find");
-      case "KeyK":
-        return go("link");
-      case "KeyP":
-        return go("print");
-      case "KeyQ":
-        return go("quit");
-      case "KeyY":
-        return go("redo");
-      case "Comma":
-        return go("settings");
-      case "Period":
-        return go("superscript");
-      case "Backslash":
-        return go("clearFormat");
+    if (!back.hidden) return;
+    if (e.key === "Escape") {
+      if (!pop.hidden) hidePopover();
+      else if (findOpen) closeFind();
+      else if (selImg) deselectImage();
+      else if (fullscreen) run("fullscreen");
     }
   });
+
+  // Show each command's current shortcut in button tooltips: "Bold (Ctrl + B)".
+  function refreshKeyHints() {
+    $$("[data-cmd], [data-key-cmd]").forEach((b) => {
+      const id = b.dataset.keyCmd || b.dataset.cmd;
+      if (!APP_KEY[id]) return;
+      if (b.dataset.base === undefined) b.dataset.base = (b.title || "").replace(/\s*\([^)]*\)\s*$/, "");
+      const k = acc(id);
+      b.title = b.dataset.base + (k ? ` (${prettyAccel(k)})` : "");
+    });
+  }
+
+  // Settings → Keyboard shortcuts: one row per command, its keys as chips
+  // (click one to change it, × to remove it, + to add another, ↺ for the default).
+  let keyRecorder = null; // { id, index, button } while waiting for keys
+  function renderKeyRows() {
+    const box = $("#app-keys");
+    let html = "";
+    let group = "";
+    for (const c of APP_KEYS) {
+      if (c.group !== group) {
+        group = c.group;
+        html += `<h4 class="keys-group" data-group="${group}">${group === "Overlay" ? "In the overlay" : "Editor — " + group}</h4>`;
+      }
+      const keys = keysFor(c.id);
+      const changed = (S.keys || {})[c.id] !== undefined;
+      html += `<div class="row key-row" data-cmd="${c.id}" data-group="${c.group}"><span>${escHtml(c.label)}</span><div class="keys">${keys
+        .map((k, i) => `<button class="key-chip" data-i="${i}" title="Click to change">${escHtml(prettyAccel(k))}<i class="x" data-x="${i}" title="Remove">×</i></button>`)
+        .join("")}<button class="key-add" title="Add a shortcut">+</button>${changed ? `<button class="key-reset" title="Back to the default (${escHtml(APP_KEY[c.id].keys.map(prettyAccel).join(", ") || "none")})">↺</button>` : ""}</div></div>`;
+    }
+    box.innerHTML = html;
+    filterKeyRows();
+  }
+  function filterKeyRows() {
+    const q = $("#keys-filter").value.trim().toLowerCase();
+    $$(".settings-body .row[data-key-search], #app-keys .key-row").forEach((r) => {
+      const text = (r.textContent + " " + (r.dataset.group || "")).toLowerCase();
+      r.hidden = !!q && !text.includes(q);
+    });
+    $$(".settings-body .keys-group").forEach((h) => {
+      h.hidden = !!q && !$$(`.settings-body .row[data-group="${h.dataset.group}"]`).some((r) => !r.hidden);
+    });
+  }
+  $("#keys-filter").addEventListener("input", filterKeyRows);
+  async function saveKeys(id, list) {
+    const keys = { ...(S.keys || {}) };
+    const def = APP_KEY[id].keys;
+    if (list && !(list.length === def.length && list.every((k, i) => k === def[i]))) keys[id] = list;
+    else delete keys[id];
+    await setSetting({ keys });
+    rebuildKeys();
+    renderKeyRows();
+  }
+  function stopRecording() {
+    if (!keyRecorder) return;
+    keyRecorder = null;
+    api.call("shortcuts:pause", false).catch(() => {});
+    renderKeyRows();
+  }
+  $("#app-keys").addEventListener("click", (e) => {
+    const row = e.target.closest(".key-row");
+    if (!row) return;
+    const id = row.dataset.cmd;
+    if (e.target.dataset.x !== undefined) {
+      const list = keysFor(id).filter((_, i) => i !== +e.target.dataset.x);
+      return void saveKeys(id, list);
+    }
+    if (e.target.closest(".key-reset")) return void saveKeys(id, null);
+    const b = e.target.closest(".key-chip, .key-add");
+    if (!b) return;
+    if (keyRecorder) stopRecording();
+    const btn = $(
+      b.classList.contains("key-add") ? `.key-row[data-cmd="${id}"] .key-add` : `.key-row[data-cmd="${id}"] .key-chip[data-i="${b.dataset.i}"]`,
+    );
+    keyRecorder = { id, index: b.classList.contains("key-add") ? -1 : +b.dataset.i, button: btn };
+    btn.classList.add("rec");
+    btn.textContent = "Press keys…";
+    api.call("shortcuts:pause", true).catch(() => {}); // so Ctrl+] etc. can be typed here
+  });
+  document.addEventListener("mousedown", (e) => {
+    if (keyRecorder && e.target !== keyRecorder.button) stopRecording();
+  });
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (!keyRecorder) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape" && !e.ctrlKey && !e.altKey && !e.shiftKey) return void stopRecording();
+      const a = accelOf(e);
+      if (!a) return; // a modifier on its own: wait for the rest
+      const { id, index, button } = keyRecorder;
+      const c = APP_KEY[id];
+      const say = (msg) => {
+        button.textContent = msg;
+        setTimeout(() => keyRecorder && keyRecorder.button === button && (button.textContent = "Press keys…"), 1600);
+      };
+      if (c.scope !== "overlay" && !/CommandOrControl|Alt|Super|^F\d|(^|\+)F\d/.test(a))
+        return say("Add Ctrl or Alt");
+      if (RESERVED[a]) return say(`${prettyAccel(a)} is for ${RESERVED[a]}`);
+      const owner = keyOwner(a, scopesOf(c.scope), id);
+      if (owner) return say(`Used by “${owner}”`);
+      const list = [...keysFor(id)];
+      if (index < 0) { if (!list.includes(a)) list.push(a); } else list[index] = a;
+      keyRecorder = null;
+      api.call("shortcuts:pause", false).catch(() => {});
+      saveKeys(id, [...new Set(list)]);
+    },
+    true,
+  );
 
   /* ---------------- IPC from main ---------------- */
   api.on("mode", (m) => applyMode(m));
@@ -2855,11 +3040,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     for (let i = 0; i < Math.min(5, steps || 1); i++) Immersive.go(dir);
   });
   api.on("fullscreen", applyFullscreen);
-  api.on("update-status", (u) => {
-    applyUpdateStatus(u);
-    // An update that was already downloaded when the app opened is applied straight away.
-    if (u.state === "ready" && u.auto) installUpdate();
-  });
+  api.on("update-status", (u) => applyUpdateStatus(u));
   api.on("theme-changed", () => {
     if (S.mode === "immersive") Immersive.load(serialize(), Immersive.start);
   });
@@ -2884,6 +3065,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
 
   /* ---------------- start ---------------- */
   applySettings();
+  rebuildKeys();
   $("#sb-root").textContent = S.docsFolder;
   await refreshTree();
   let startRel = S.lastDoc;

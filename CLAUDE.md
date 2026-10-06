@@ -11,9 +11,11 @@ bundled by esbuild into `renderer/editor.bundle.js` — generated and git-ignore
 2. `npm run release` (or `npm run release minor`) — bumps the version, builds the NSIS installer,
    uploads it to the public `interview-notes` GitHub repo, then commits/tags/pushes the bump.
    `RELEASE_NOTES="..."` adds notes to the release page.
-3. Installed apps pick it up automatically (check at launch + every 4h, download in background,
-   install on quit; an update that's ready within a minute of launch installs right away). Installing
-   shows the "Updating Interview Notes" window, then the installer's progress bar (not silent).
+3. Installed apps download it in the background (check at launch + every 4h) but only install after
+   asking: each time the app is opened (launch, or second-instance while it's in the tray) a dialog
+   offers Update now / Not now. Mode switches don't count. Installing shows the "Updating Interview
+   Notes" window, then the installer's progress bar (not silent). Copies before 2.0.3 still install
+   on quit without asking.
 
 Source lives in the private `lecture-notes` repo; only installers (and `public-repo/README.md`,
 copied by hand) go to the public `interview-notes` repo, renamed from `lecture-notes-releases` —
@@ -28,6 +30,13 @@ electron-updater can't read a private repo without shipping a token in the app.
   installs a second app instead of updating.
 - Copies updated from Lecture Notes keep using `%APPDATA%\Lecture Notes` for settings (main.js
   switches userData to it when it has a settings.json); new installs use `%APPDATA%\Interview Notes`.
+
+## Shortcuts
+
+In-app shortcuts are the `APP_KEYS` table in app.js, dispatched by one capture-phase keydown
+listener; changed ones are saved as `settings.keys = { command: [accelerators] }`. TipTap's own
+keyboard shortcuts are switched off (`noKeys` in editor-src) so a removed binding really stops working.
+The from-any-app shortcuts are the separate `*Shortcut` settings, registered by main.js.
 
 ## Editor
 
@@ -49,6 +58,8 @@ electron-updater can't read a private repo without shipping a token in the app.
   tray icon or global shortcuts — otherwise the user sees a second copy of the app. Drive it with
   `--remote-debugging-port` + CDP (Runtime.evaluate, Page.captureScreenshot, Input.dispatchKeyEvent).
   Reload the page with CDP `Page.reload` — `location.reload()` is blocked by the app's navigation guard.
+  `LN_TEST_FAKE_UPDATE=9.9.9` (with LN_TEST_HIDDEN) fakes an available update; `LN_TEST_UPDATE_ANSWER`
+  0 = Update now, 1 = Not now (default); what happens is logged to `test-updates.log` in the profile.
   Extra dev-only switches: `LN_TEST_HOOK=1` turns the Alt+scroll input hook on in test mode;
   `LN_TEST_SHORTCUTS=1` registers real global shortcuts — only use it with a settings.json whose
   shortcuts are keys the user's copy doesn't hold (e.g. Ctrl+Alt+Shift+F5–F11). Synthetic keys can

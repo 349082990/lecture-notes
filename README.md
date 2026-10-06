@@ -12,6 +12,8 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 
 ## Shortcuts
 
+Every shortcut can be changed in **Settings → Keyboard shortcuts**: click a shortcut and press new keys, × removes one, + adds another, ↺ puts back the default. These are the defaults:
+
 | Shortcut | What it does |
 |---|---|
 | **Ctrl + ]** | Show / hide the overlay — works from any app (changeable in Settings) |
@@ -51,7 +53,7 @@ Uninstall from Settings → Apps. Your documents are never deleted.
 
 ## Updates
 
-The app updates itself. It checks for a new version when it starts (and every few hours), downloads it in the background, and installs it when you quit — so closing and reopening the app is all it takes. If an update is already downloaded when the app opens, it installs straight away and reopens. While it installs, a small "Updating Interview Notes" window explains that the app will close and reopen by itself, then the installer's progress bar shows, and the new version says "Interview Notes was updated to version …" when it opens. You can also use **Settings → Updates → Check for updates**, **Tools → Check for updates**, or the tray menu; when an update is ready, a **Restart to update** button appears in the title bar.
+The app checks for a new version when it starts (and every few hours) and downloads it in the background, but it never installs one without asking. Each time you open the app (start it, or open it again from the Start menu or desktop while it's in the tray) and a newer version is available, it asks **Update now** or **Not now**. Not now leaves your version alone until the next time you open the app; switching between the editor and the overlay doesn't count. Updating shows a small "Updating Interview Notes" window, then the installer's progress bar, and the new version says "Interview Notes was updated to version …" when it opens. You can also use **Settings → Updates → Check for updates**, **Tools → Check for updates**, or the tray menu; when an update is ready, a **Restart to update** button appears in the title bar.
 
 ## Building from source
 

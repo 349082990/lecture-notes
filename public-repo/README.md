@@ -18,7 +18,7 @@ Windows 10 or 11, 64-bit.
 
 ## Updates
 
-The app updates itself. It checks for new versions in the background; when one is ready it installs the next time you close and reopen the app (or click **Restart to update** in the title bar). While it installs you'll see an "Updating Interview Notes" window, and the app reopens by itself a few seconds later.
+The app checks for new versions in the background. When one is available, it asks you each time you open the app whether to **Update now** or **Not now**. Nothing is installed unless you say so. If you update, you'll see an "Updating Interview Notes" window and the app reopens by itself a few seconds later.
 
 You can also check from **Settings → Updates** or **Tools → Check for updates**.
 
@@ -37,7 +37,7 @@ You can also check from **Settings → Updates** or **Tools → Check for update
 | **Tab / Shift + Tab** | Indent / outdent a bullet |
 | **Ctrl + Q** | Quit |
 
-All shortcuts can be changed in **Settings** (the sliders icon at the top right).
+Every shortcut, including bold, headings, zoom and the overlay keys, can be changed in **Settings → Keyboard shortcuts** (the sliders icon at the top right).
 
 ## Your notes stay on your PC
 
