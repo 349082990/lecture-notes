@@ -146,6 +146,11 @@ export function normalizeHtml(html) {
     // nothing bigger than 10 pt
     const pt = el.style.fontSize ? sizeInPt(el.style.fontSize) : null
     if (pt !== null && pt > MAX_PT + 0.01) el.style.fontSize = MAX_PT + 'pt'
+    // A colour that points at one of the app's own theme variables (copied within the old editor,
+    // e.g. "var(--page-text)") is really "default text colour" — black on the page, but invisible
+    // on the dark overlay. Same for a background.
+    if (/var\(/.test(el.style.color)) { el.style.removeProperty('color'); el.classList.add('ln-ink') }
+    if (/var\(/.test(el.style.backgroundColor)) el.style.removeProperty('background-color')
     // Google Docs puts "background-color: transparent" on every piece of text
     if (/^(transparent|rgba\(0, 0, 0, 0\))$/.test(el.style.backgroundColor)) el.style.removeProperty('background-color')
     // underline / strikethrough written as text-decoration-line (the editor reads text-decoration)

@@ -30,6 +30,9 @@ window.Immersive = (function () {
   function adaptColors() {
     const dark = isDark();
     content.querySelectorAll('[style]').forEach(el => {
+      // the app's own theme colours (e.g. the editor page's black) → the overlay's text colour
+      if (/var\(/.test(el.style.color)) el.style.removeProperty('color');
+      if (/var\(/.test(el.style.backgroundColor)) el.style.removeProperty('background-color');
       const c = el.style.color;
       const m = c && c.match(/rgba?\(([^)]+)\)/);
       if (m) {
