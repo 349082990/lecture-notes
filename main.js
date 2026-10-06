@@ -507,6 +507,7 @@ function refreshTrayMenu() {
 let askOnOpen = true;          // the app was just opened: ask about an update this time
 let asking = false;
 let userWantsUpdate = false;   // said yes while the download was still going
+let downloaded = null;         // version that's downloaded and ready to install
 let updateNotes = '';
 function sendUpdate(status) {
   const changed = status.state !== updateStatus.state || status.version !== updateStatus.version;
@@ -529,25 +530,33 @@ function updateFailed(e) {
     if (!TEST_HIDDEN) dialog.showMessageBox(win, { type: 'warning', title: 'Update failed', message: "The update couldn't be downloaded.", detail: shortErr(e) + '\n\nYou can try again from Settings → Updates.' }).catch(() => {});
   }
   askOnOpen = false;
-  if (updateStatus.state === 'ready') return;
+  if (downloaded) return sendUpdate({ state: 'ready', version: downloaded }); // still installable
   sendUpdate({ state: 'error', message: shortErr(e) });
 }
 // Dev-only: LN_TEST_FAKE_UPDATE=<version> pretends that version is on GitHub (with LN_TEST_HIDDEN).
-function fakeUpdater(version) {
+// A fake-version.txt in the profile changes the "published" version between checks.
+function fakeUpdater(initial) {
   const u = new (require('events'))();
+  let have = null;
   u.checkForUpdates = async () => {
+    let version = initial;
+    try { version = fs.readFileSync(path.join(app.getPath('userData'), 'fake-version.txt'), 'utf8').trim(); } catch {}
+    testLog('check -> ' + version);
     u.emit('checking-for-update');
-    setTimeout(() => {
-      u.emit('update-available', { version, releaseNotes: '<ul><li>Test change one</li><li>Test change two</li></ul>' });
+    await new Promise(r => setTimeout(r, 200));
+    if (version.localeCompare(app.getVersion(), undefined, { numeric: true }) <= 0) return u.emit('update-not-available', { version });
+    u.emit('update-available', { version, releaseNotes: '<ul><li>Test change one</li><li>Test change two</li></ul>' });
+    if (version === have) return u.emit('update-downloaded', { version });
+    {
       let pct = 0;
       const t = setInterval(() => {
         pct += 25;
         u.emit('download-progress', { percent: pct });
-        if (pct >= 100) { clearInterval(t); u.emit('update-downloaded', { version }); }
+        if (pct >= 100) { clearInterval(t); have = version; u.emit('update-downloaded', { version }); }
       }, 300);
-    }, 200);
+    }
   };
-  u.quitAndInstall = () => { testLog('quitAndInstall ' + version); app.exit(0); };
+  u.quitAndInstall = () => { testLog('quitAndInstall ' + have); app.exit(0); };
   return u;
 }
 function testLog(msg) {
@@ -563,8 +572,9 @@ function setupUpdater() {
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = false; // only ever installed after the user says yes
   updater.on('checking-for-update', () => sendUpdate({ state: 'checking' }));
-  updater.on('update-not-available', () => { askOnOpen = false; sendUpdate({ state: 'none' }); });
+  updater.on('update-not-available', () => { askOnOpen = false; downloaded = null; sendUpdate({ state: 'none' }); });
   updater.on('update-available', (i) => {
+    if (i.version === downloaded) return; // already here: 'update-downloaded' follows straight away
     sendUpdate({ state: 'downloading', version: i.version, percent: 0 });
     askAboutUpdate(i);
   });
@@ -573,24 +583,31 @@ function setupUpdater() {
     setUpdateScreen('downloading', p.percent);
   });
   updater.on('update-downloaded', (i) => {
+    downloaded = i.version;
     sendUpdate({ state: 'ready', version: i.version });
     if (userWantsUpdate) requestInstall();
     else askAboutUpdate(i);
   });
   updater.on('error', updateFailed);
-  setTimeout(checkForUpdates, 1500); // launching counts as opening the app
+  setTimeout(() => checkForUpdates(), 1500); // launching counts as opening the app
 }
-async function checkForUpdates() {
+// ask: the app was opened again or "Check for updates" was clicked, so a new version found now is
+// asked about straight away. A version that's already downloaded doesn't stop the check: there may
+// be an even newer one by now (it's reported again if not).
+async function checkForUpdates({ ask = false } = {}) {
   if (!updater) return updateStatus;
-  if (['checking', 'downloading', 'ready', 'installing'].includes(updateStatus.state)) return updateStatus;
+  if (ask) askOnOpen = true;
+  if (['checking', 'installing'].includes(updateStatus.state)) return updateStatus;
+  if (updateStatus.state === 'downloading') {
+    askAboutUpdate({ version: updateStatus.version });
+    return updateStatus;
+  }
   try { await updater.checkForUpdates(); } catch (e) { updateFailed(e); }
   return updateStatus;
 }
 // The app was opened again while already running (Start menu, desktop, taskbar pin).
 function appOpenedAgain() {
-  askOnOpen = true;
-  if (['downloading', 'ready'].includes(updateStatus.state)) askAboutUpdate({ version: updateStatus.version });
-  else if (updateStatus.state !== 'checking') checkForUpdates();
+  checkForUpdates({ ask: true });
 }
 const plainNotes = (html) => String(html || '')
   .replace(/<li[^>]*>/gi, '• ').replace(/<\/(p|li|h\d)>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
@@ -932,7 +949,7 @@ function setupIpc() {
   handle('toast:show', (msg, ms) => { showToast(msg, ms); });
 
   handle('update:status', () => updateStatus);
-  handle('update:check', () => checkForUpdates());
+  handle('update:check', () => checkForUpdates({ ask: true }));
   handle('update:install', () => installUpdate());
 
   handle('docs:root', () => root());

@@ -75,6 +75,10 @@ The from-any-app shortcuts are the separate `*Shortcut` settings, registered by 
   Reload the page with CDP `Page.reload` — `location.reload()` is blocked by the app's navigation guard.
   `LN_TEST_FAKE_UPDATE=9.9.9` (with LN_TEST_HIDDEN) fakes an available update; `LN_TEST_UPDATE_ANSWER`
   0 = Update now, 1 = Not now (default); what happens is logged to `test-updates.log` in the profile.
+  A `fake-version.txt` in the profile changes the fake "published" version between checks (call
+  `api.call('update:check')` over CDP to click Check for updates).
+  LN_TEST_HIDDEN only works unpackaged (`npx electron .`): a packaged build (`dist/win-unpacked`)
+  ignores it and shows a real window, tray icon, dialogs and global shortcuts on the user's screen.
   Extra dev-only switches: `LN_TEST_HOOK=1` turns the Alt+scroll input hook on in test mode;
   `LN_TEST_SHORTCUTS=1` registers real global shortcuts — only use it with a settings.json whose
   shortcuts are keys the user's copy doesn't hold (e.g. Ctrl+Alt+Shift+F5–F11). Synthetic keys can
