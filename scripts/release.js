@@ -4,8 +4,9 @@
 //   npm run release minor      -> bump minor (1.1.0 -> 1.2.0)
 //   npm run release 2.0.0      -> exact version
 //
-// Builds the installer, uploads it to the public lecture-notes-releases repo (where the app
-// looks for updates), then commits the version bump, tags it and pushes the source repo.
+// Builds the installer, uploads it to the public interview-notes repo (where people download the
+// app and installed copies look for updates), then commits the version bump, tags it and pushes
+// the source repo. RELEASE_NOTES (optional, Markdown) is added to the release page.
 // Needs the GitHub CLI signed in (`gh auth login`) or a GH_TOKEN environment variable.
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -34,7 +35,7 @@ if (!token) {
 const bump = process.argv[2] || 'patch';
 sh(`npm version ${bump} --no-git-tag-version --allow-same-version`, { stdio: 'pipe' });
 const version = pkg().version;
-console.log(`\nReleasing Lecture Notes v${version} to github.com/${pub.owner}/${pub.repo}\n`);
+console.log(`\nReleasing Interview Notes v${version} to github.com/${pub.owner}/${pub.repo}\n`);
 
 // The release is created as a DRAFT first and only made public once every file (installer,
 // blockmap, latest.yml) is uploaded. Installed apps can't see drafts, so they never catch a
@@ -52,7 +53,11 @@ async function draftRelease(tag) {
     if (!existing.draft) throw new Error(`${tag} is already published — pick a new version`);
     return existing;
   }
-  return gh(api, { method: 'POST', body: JSON.stringify({ tag_name: tag, name: tag.slice(1), body: `Lecture Notes ${tag.slice(1)}`, draft: true }) });
+  const v = tag.slice(1);
+  const body = `Interview Notes ${v}${process.env.RELEASE_NOTES ? '\n\n' + process.env.RELEASE_NOTES : ''}\n\n` +
+    `**Download:** \`Interview-Notes-Setup-${v}.exe\` below (Windows 10 / 11). ` +
+    'Already installed? The app updates itself — just restart it.';
+  return gh(api, { method: 'POST', body: JSON.stringify({ tag_name: tag, name: v, body, draft: true }) });
 }
 async function publishRelease(release) {
   const assets = (await gh(`${api}/${release.id}/assets`)).map(a => a.name);
@@ -63,6 +68,7 @@ async function publishRelease(release) {
 (async () => {
 try {
   const release = await draftRelease(`v${version}`);
+  sh('npm run build:editor');
   sh('npx electron-builder --win --publish always', { env: { ...process.env, GH_TOKEN: token } });
   await publishRelease(release);
 } catch (e) {

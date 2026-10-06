@@ -134,11 +134,19 @@ window.Immersive = (function () {
       }
       lines.push({ ...r });
     }
+    // The line holding each heading's own first piece of text (not just "the line below the
+    // heading's top edge", which picked up ordinary text when a heading had nothing visible in it).
     heads = [];
     content.querySelectorAll(HEAD_SEL).forEach(h => {
-      if (!h.textContent.trim()) return;
-      const top = h.getBoundingClientRect().top - base;
-      const i = lines.findIndex(l => l.b > top + 1);
+      const hw = document.createTreeWalker(h, NodeFilter.SHOW_TEXT, {
+        acceptNode: n => n.nodeValue.replace(/[\s​]/g, '') ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+      });
+      if (!hw.nextNode()) return;
+      range.selectNodeContents(hw.currentNode);
+      const r = [...range.getClientRects()].find(x => x.width > 0.5 && x.height > 0.5);
+      if (!r) return;
+      const mid = (r.top + r.bottom) / 2 - base;
+      const i = lines.findIndex(l => l.t <= mid && l.b >= mid);
       if (i >= 0 && heads[heads.length - 1] !== i) heads.push(i);
     });
     lastWidth = w;

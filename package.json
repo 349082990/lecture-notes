@@ -1,14 +1,17 @@
 {
-  "name": "lecture-notes",
+  "name": "interview-notes",
   "version": "1.8.4",
-  "description": "Lecture Notes",
+  "description": "Interview Notes — a notes editor with an always-on-top reading overlay",
   "main": "main.js",
   "scripts": {
+    "build:editor": "esbuild editor-src/index.js --bundle --format=iife --minify --target=chrome130 --legal-comments=none --outfile=renderer/editor.bundle.js",
+    "prestart": "npm run build:editor",
     "start": "electron .",
+    "predist": "npm run build:editor",
     "dist": "electron-builder --win --publish never",
     "release": "node scripts/release.js"
   },
-  "author": "Lecture Notes",
+  "author": "Interview Notes",
   "dependencies": {
     "electron-updater": "^6.6.2",
     "html-to-docx": "^1.8.0",
@@ -16,13 +19,22 @@
     "uiohook-napi": "^1.5.5"
   },
   "devDependencies": {
+    "@tiptap/core": "^3.31.4",
+    "@tiptap/extension-list": "^3.31.4",
+    "@tiptap/extension-subscript": "^3.31.4",
+    "@tiptap/extension-superscript": "^3.31.4",
+    "@tiptap/extension-table": "^3.31.4",
+    "@tiptap/extension-text-style": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
     "electron": "^33.4.11",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2"
   },
-  "productName": "Lecture Notes",
+  "productName": "Interview Notes",
   "build": {
     "appId": "com.lecturenotes.app",
-    "productName": "Lecture Notes",
+    "productName": "Interview Notes",
     "npmRebuild": false,
     "asarUnpack": [
       "node_modules/uiohook-napi/**"
@@ -56,18 +68,19 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "runAfterFinish": true,
-      "shortcutName": "Lecture Notes",
+      "shortcutName": "Interview Notes",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "artifactName": "Lecture-Notes-Setup-${version}.${ext}"
+      "artifactName": "Interview-Notes-Setup-${version}.${ext}"
     },
     "publish": [
       {
         "provider": "github",
         "owner": "349082990",
-        "repo": "lecture-notes-releases",
+        "repo": "interview-notes",
         "releaseType": "release"
       }
-    ]
+    ],
+    "copyright": "Copyright © 2026 Interview Notes"
   }
 }

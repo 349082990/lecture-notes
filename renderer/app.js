@@ -1,13 +1,31 @@
-/* Lecture Notes — renderer */
+/* Interview Notes — renderer */
 (async function () {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const page = $("#page");
   const canvas = $("#canvas");
   const titleInput = $("#doc-title");
   const saveState = $("#save-state");
-  page.classList.add("doc");
   paintIcons();
+
+  /* ---------------- the editor (ProseMirror, see editor-src/) ---------------- */
+  // Pages are 8.5 × 11 in like Google Docs' print layout, with a gap between them.
+  const PAGE_H = 1056,
+    PAGE_GAP = 16;
+  const pagesEl = $("#pages");
+  const editor = LNEditor.createEditor($("#page"), {
+    pageH: PAGE_H,
+    gap: PAGE_GAP,
+    scroller: () => canvas,
+    onPages: (n) => {
+      while (pagesEl.children.length < n) pagesEl.appendChild(document.createElement("div"));
+      while (pagesEl.children.length > n) pagesEl.lastChild.remove();
+      ed.style.minHeight = n * PAGE_H + (n - 1) * PAGE_GAP + "px";
+    },
+    onPaste: (e, view) => handlePaste(e, view),
+    onDrop: (e, view, moved) => handleDrop(e, view, moved),
+  });
+  const ed = editor.view.dom; // the editable page
+  const { NodeSelection } = LNEditor;
 
   /* ---------------- helpers ---------------- */
   let toastTimer;
@@ -148,6 +166,7 @@
     lastImmOpts = io;
     refreshOpenSettings();
     applyZoom();
+    editor.ln.paginate(); // margins, font or spacing may have changed
   }
   const saveSettingsSoon = debounce(
     (patch) => api.call("settings:set", patch).catch(() => {}),
@@ -206,21 +225,31 @@
         toast(dir > 0 ? "No more headings below" : "No more headings above", 1200);
       return;
     }
-    const hs = $$("h1,h2,h3,h4,h5,h6", page).filter((h) => h.textContent.trim());
-    const top = canvas.getBoundingClientRect().top;
-    const pos = hs.map((h) => h.getBoundingClientRect().top - top);
-    let i = -1;
-    if (dir > 0) i = pos.findIndex((p) => p > 24);
-    else pos.forEach((p, k) => { if (p < 4) i = k; });
-    if (i < 0)
+    // Measured from where you are in the document — the caret, or the top of the screen if the
+    // caret has been scrolled out of view — never from how far the page could scroll (near the
+    // end of a document the last headings can't reach the top, which used to stall the jumps).
+    const hs = editor.ln.headings();
+    const view = editor.view;
+    const c = canvas.getBoundingClientRect();
+    const blockAt = (pos) => {
+      const $p = editor.state.doc.resolve(pos);
+      return $p.depth ? $p.before($p.depth) : pos;
+    };
+    let ref = blockAt(editor.state.selection.from); // the paragraph / heading the caret is in
+    try {
+      const at = view.coordsAtPos(editor.state.selection.from);
+      if (at.bottom < c.top || at.top > c.bottom) {
+        const hit = view.posAtCoords({ left: c.left + c.width / 2, top: c.top + 8 });
+        if (hit) ref = blockAt(hit.pos);
+      }
+    } catch {}
+    const target =
+      dir > 0 ? hs.find((h) => h.pos > ref) : [...hs].reverse().find((h) => h.pos < ref);
+    if (!target)
       return toast(dir > 0 ? "No more headings below" : "No more headings above", 1200);
-    canvas.scrollBy({ top: pos[i] - 12 });
-    const r = document.createRange();
-    r.selectNodeContents(hs[i]);
-    r.collapse(true);
-    getSelection().removeAllRanges();
-    getSelection().addRange(r);
-    page.focus();
+    editor.chain().setTextSelection(target.pos + 1).focus(null, { scrollIntoView: false }).run();
+    // the heading's text (its box may start higher, when a page gap is above it)
+    canvas.scrollTop += view.coordsAtPos(target.pos + 1).top - c.top - 24;
   }
   function matchesAccel(e, accel) {
     if (!accel) return false;
@@ -263,13 +292,7 @@
   let targetFolder = "";
 
   function serialize() {
-    const c = page.cloneNode(true);
-    c.querySelectorAll(".sel").forEach((e) => {
-      e.classList.remove("sel");
-      if (!e.className) e.removeAttribute("class");
-    });
-    unwrapLists(c);
-    return c.innerHTML;
+    return editor.ln.html();
   }
   // Downloads and printing are always black text on white: "default colour" text is black there.
   function exportHtml() {
@@ -281,18 +304,6 @@
       if (!e.className) e.removeAttribute("class");
     });
     return c.innerHTML;
-  }
-  // Chromium makes a list inside the paragraph it came from (<p><ul>…</ul></p>). That isn't valid
-  // HTML and reopens as stray empty paragraphs around the list, so lift lists out when saving.
-  // (Only on the saved copy — changing the live page would break undo.)
-  function unwrapLists(root) {
-    root.querySelectorAll("p > ul, p > ol").forEach((list) => {
-      const p = list.parentElement;
-      const onlyList = [...p.childNodes].every(
-        (n) => n === list || n.nodeName === "BR" || (n.nodeType === 3 && !n.nodeValue.trim()),
-      );
-      if (onlyList) p.replaceWith(list);
-    });
   }
   const saveSoon = debounce(() => saveNow(), 600);
   function markDirty() {
@@ -338,32 +349,22 @@
       return false;
     }
     cur = { rel, dirty: false, saving: null };
-    page.innerHTML = html && html.trim() ? html : "<p><br></p>";
-    const shrunk = capFontSizes(page); // documents from before the 10 pt limit
+    if (findOpen) closeFind();
+    // (sizes over 10 pt, headings wrapped around lists etc. are fixed while loading)
+    editor.ln.load(html && html.trim() ? html : "<p><br></p>");
     titleInput.value = baseName(rel);
-    document.title = baseName(rel) + " — Lecture Notes";
+    document.title = baseName(rel) + " — Interview Notes";
     saveState.textContent = "Saved to this PC";
     targetFolder = dirOf(rel);
     canvas.scrollTop = 0;
     setSetting({ lastDoc: rel }, true);
-    if (shrunk) markDirty();
     updateWordCount();
     renderTree();
     deselectImage();
+    updateToolbarSoon();
     if (S.mode === "immersive") loadImmersive();
-    else if (opts.focus !== false) {
-      page.focus();
-      placeCaretStart();
-    }
+    else if (opts.focus !== false) editor.commands.focus("start", { scrollIntoView: false });
     return true;
-  }
-  function placeCaretStart() {
-    const sel = getSelection(),
-      r = document.createRange();
-    r.setStart(page, 0);
-    r.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(r);
   }
 
   async function newDoc(
@@ -659,153 +660,153 @@
   titleInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      page.focus();
+      editor.commands.focus();
     }
     if (e.key === "Escape") {
       titleInput.value = baseName(cur.rel);
-      page.focus();
+      editor.commands.focus();
     }
   });
   titleInput.addEventListener("blur", () => renameCurrent(titleInput.value));
 
   /* ---------------- selection & toolbar state ---------------- */
-  let savedRange = null;
-  document.addEventListener("selectionchange", () => {
-    const sel = getSelection();
-    if (sel.rangeCount && page.contains(sel.anchorNode)) {
-      savedRange = sel.getRangeAt(0).cloneRange();
+  editor.on("selectionUpdate", () => {
+    updateToolbarSoon();
+    updateLinkBubble();
+    syncImageSelection();
+  });
+  editor.on("transaction", ({ transaction }) => {
+    if (transaction.docChanged) {
       updateToolbarSoon();
-      updateLinkBubble();
+      positionImageUi();
     }
   });
-  function restoreSel() {
-    if (document.activeElement !== page) page.focus({ preventScroll: true });
-    const sel = getSelection();
-    if (savedRange && page.contains(savedRange.startContainer)) {
-      sel.removeAllRanges();
-      sel.addRange(savedRange);
+  editor.on("update", () => markDirty());
+  // the DOM element the caret / selection starts in (for computed font, size and colour)
+  function anchorEl() {
+    try {
+      const { node } = editor.view.domAtPos(editor.state.selection.from);
+      return node.nodeType === 1 ? node : node.parentElement;
+    } catch {
+      return ed;
     }
   }
-  function anchorEl() {
-    const sel = getSelection();
-    let n = sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
-    if (!n || !page.contains(n)) n = savedRange && savedRange.startContainer;
-    if (!n) return page;
-    return n.nodeType === 1 ? n : n.parentElement;
-  }
-  const BLOCK_SEL = "p,h1,h2,h3,h4,h5,h6,li,blockquote,pre,div,td,th";
-  function closestBlock(n) {
-    let el = n && (n.nodeType === 1 ? n : n.parentElement);
-    while (el && el !== page) {
-      if (el.matches(BLOCK_SEL)) return el;
-      el = el.parentElement;
+  // the nearest list (bulletList / orderedList) around the selection: { node, pos } or null
+  function listAround() {
+    const $f = editor.state.selection.$from;
+    for (let d = $f.depth; d > 0; d--) {
+      const n = $f.node(d);
+      if (n.type.name === "bulletList" || n.type.name === "orderedList") return { node: n, pos: $f.before(d) };
     }
     return null;
   }
-  function selectedBlocks() {
-    const sel = getSelection();
-    const r = sel.rangeCount ? sel.getRangeAt(0) : savedRange;
-    if (!r) return [];
-    const out = $$(BLOCK_SEL, page).filter(
-      (el) =>
-        r.intersectsNode(el) && !el.querySelector(BLOCK_SEL + ",table,ul,ol"),
-    );
-    if (!out.length) {
-      const b = closestBlock(r.startContainer);
-      if (b) out.push(b);
-    }
-    return out;
+  function textblock() {
+    const $f = editor.state.selection.$from;
+    for (let d = $f.depth; d > 0; d--) if ($f.node(d).isTextblock) return $f.node(d);
+    return null;
   }
   function updateToolbar() {
     if (S.mode !== "editor") return;
-    const st = (c) => {
-      try {
-        return document.queryCommandState(c);
-      } catch {
-        return false;
-      }
-    };
-    [
-      "bold",
-      "italic",
-      "underline",
-      "strikeThrough",
-      "insertUnorderedList",
-      "insertOrderedList",
-      "justifyCenter",
-      "justifyRight",
-      "justifyFull",
-    ].forEach((c) => {
+    const set = (c, v) => {
       const b = $(`.tb[data-cmd="${c}"]`);
-      if (b) b.classList.toggle("on", st(c));
-    });
+      if (b) b.classList.toggle("on", !!v);
+    };
+    set("bold", editor.isActive("bold"));
+    set("italic", editor.isActive("italic"));
+    set("underline", editor.isActive("underline"));
+    set("strikeThrough", editor.isActive("strike"));
+    const list = listAround();
+    const checklist = !!list && list.node.type.name === "bulletList" && list.node.attrs.class === "checklist";
+    set("checklist", checklist);
+    set("insertUnorderedList", !!list && list.node.type.name === "bulletList" && !checklist);
+    set("insertOrderedList", !!list && list.node.type.name === "orderedList");
+    const align = (editor.ln.blockStyle("text-align") || "left").replace("start", "left");
+    set("justifyLeft", align === "left");
+    set("justifyCenter", align === "center");
+    set("justifyRight", align === "right");
+    set("justifyFull", align === "justify");
     const el = anchorEl();
-    const inChecklist = !!(el && el.closest && el.closest("ul.checklist"));
-    $('.tb[data-cmd="checklist"]').classList.toggle("on", inChecklist);
-    if (inChecklist)
-      $('.tb[data-cmd="insertUnorderedList"]').classList.remove("on");
-    $('.tb[data-cmd="justifyLeft"]').classList.toggle(
-      "on",
-      !st("justifyCenter") && !st("justifyRight") && !st("justifyFull"),
-    );
     if (!el) return;
     const cs = getComputedStyle(el);
-    const fam = cs.fontFamily.split(",")[0].replace(/["']/g, "").trim();
+    const ts = editor.getAttributes("textStyle");
+    const fam = (ts.fontFamily || cs.fontFamily).split(",")[0].replace(/["']/g, "").trim();
     const ff = $("#font-family");
-    if (![...ff.options].some((o) => o.value === fam))
-      ff.add(new Option(fam, fam));
+    if (fam && ![...ff.options].some((o) => o.value === fam)) ff.add(new Option(fam, fam));
     ff.value = fam;
     if (document.activeElement !== $("#font-size")) {
-      const pt = Math.round(parseFloat(cs.fontSize) * 0.75 * 2) / 2;
-      $("#font-size").value = pt;
+      const pt = ts.fontSize ? LNEditor.sizeInPt(ts.fontSize) : parseFloat(cs.fontSize) * 0.75;
+      $("#font-size").value = Math.round(Math.min(MAX_PT, pt || S.defaultFontSize) * 2) / 2;
     }
-    const b = closestBlock(el);
+    const b = textblock();
     let style = "p";
     if (b) {
-      if (b.matches("h1.title")) style = "title";
-      else if (b.matches("p.subtitle")) style = "subtitle";
-      else if (/^H[1-4]$/.test(b.tagName)) style = b.tagName.toLowerCase();
+      if (b.type.name === "heading") style = b.attrs.class === "title" ? "title" : "h" + Math.min(4, b.attrs.level);
+      else if (b.attrs.class === "subtitle") style = "subtitle";
     }
     $("#block-style").value = style;
-    $("#fore-bar").style.background = cs.color;
+    $("#fore-bar").style.background = ts.color || cs.color;
   }
   const updateToolbarSoon = debounce(updateToolbar, 60);
 
   /* ---------------- formatting commands ---------------- */
-  document.execCommand("defaultParagraphSeparator", false, "p");
-  document.execCommand("styleWithCSS", false, true);
-  function exec(cmd, val = null) {
-    restoreSel();
-    document.execCommand(cmd, false, val);
-    afterEdit();
+  const chain = () => editor.chain().focus();
+  // toolbar / menu command ids → editor commands
+  const COMMANDS = {
+    undo: () => chain().undo().run(),
+    redo: () => chain().redo().run(),
+    bold: () => chain().toggleBold().run(),
+    italic: () => chain().toggleItalic().run(),
+    underline: () => chain().toggleUnderline().run(),
+    strikeThrough: () => chain().toggleStrike().run(),
+    superscript: () => chain().toggleSuperscript().run(),
+    subscript: () => chain().toggleSubscript().run(),
+    justifyLeft: () => align(null),
+    justifyCenter: () => align("center"),
+    justifyRight: () => align("right"),
+    justifyFull: () => align("justify"),
+    insertUnorderedList: () => toggleList("bulletList"),
+    insertOrderedList: () => toggleList("orderedList"),
+    indent: () => indent(1),
+    outdent: () => indent(-1),
+    delete: () => chain().deleteSelection().run(),
+  };
+  function exec(cmd) {
+    if (COMMANDS[cmd]) COMMANDS[cmd]();
   }
-  function afterEdit() {
-    fixFontTags();
-    capFontSizes(page);
-    markDirty();
-    updateToolbarSoon();
+  function align(v) {
+    editor.commands.focus();
+    editor.ln.setBlockStyle({ "text-align": v });
+  }
+  // Bullets on / off. A checklist counts as a bulleted list here, so this turns it into plain bullets.
+  function toggleList(type) {
+    const list = listAround();
+    if (list && list.node.type.name === "bulletList" && list.node.attrs.class === "checklist" && type === "bulletList") {
+      editor.chain().focus().command(({ tr }) => {
+        tr.setNodeMarkup(list.pos, null, { ...list.node.attrs, class: null });
+        return true;
+      }).run();
+      return;
+    }
+    if (type === "bulletList") chain().toggleBulletList().run();
+    else chain().toggleOrderedList().run();
+  }
+  // Tab / Shift+Tab: nests list items; outside lists moves the paragraph by half an inch (like Google Docs).
+  function indent(dir) {
+    if (listAround()) {
+      if (dir > 0) chain().sinkListItem("listItem").run();
+      else chain().liftListItem("listItem").run();
+      return;
+    }
+    editor.commands.focus();
+    const cur = parseFloat(editor.ln.blockStyle("margin-left")) || 0;
+    const next = Math.max(0, Math.round((cur + dir * 36) / 36) * 36);
+    editor.ln.setBlockStyle({ "margin-left": next ? next + "pt" : null });
   }
 
-  let pendingPt = 10;
-  function fixFontTags() {
-    $$('font[size="7"]', page).forEach((f) => {
-      f.removeAttribute("size");
-      f.style.fontSize = pendingPt + "pt";
-      $$("[style]", f).forEach((c) => {
-        c.style.fontSize = "";
-        if (!c.getAttribute("style")) c.removeAttribute("style");
-      });
-    });
-  }
   function setFontSize(pt) {
     pt = Math.max(1, Math.min(MAX_PT, Math.round(pt * 2) / 2));
     if (!isFinite(pt)) return;
-    pendingPt = pt;
-    restoreSel();
-    document.execCommand("styleWithCSS", false, false);
-    document.execCommand("fontSize", false, "7");
-    document.execCommand("styleWithCSS", false, true);
-    afterEdit();
+    chain().setFontSize(pt + "pt").run();
     $("#font-size").value = pt;
   }
   function stepFontSize(dir) {
@@ -816,221 +817,205 @@
         : [...SIZES].reverse().find((s) => s < v) || Math.max(1, v - 1);
     setFontSize(next);
   }
+  // Normal text / Title / Subtitle / Heading 1–4 for every paragraph in the selection.
+  // Keeps each paragraph's own alignment and spacing.
   function setBlockStyle(v) {
-    restoreSel();
-    if (v === "title") document.execCommand("formatBlock", false, "h1");
-    else if (v === "subtitle") document.execCommand("formatBlock", false, "p");
-    else document.execCommand("formatBlock", false, v);
-    selectedBlocks().forEach((b) => {
-      b.classList.remove("title", "subtitle");
-      if (v === "title" && b.tagName === "H1") b.classList.add("title");
-      if (v === "subtitle" && b.tagName === "P") b.classList.add("subtitle");
-      if (!b.className) b.removeAttribute("class");
+    editor.commands.focus();
+    const { state } = editor;
+    const { heading, paragraph } = state.schema.nodes;
+    const type = v === "p" || v === "subtitle" ? paragraph : heading;
+    const attrs = {
+      class: v === "title" ? "title" : v === "subtitle" ? "subtitle" : null,
+      ...(type === heading ? { level: v === "title" ? 1 : +v.slice(1) } : {}),
+    };
+    const tr = state.tr;
+    const { from, to } = state.selection;
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isTextblock) return true;
+      const $p = tr.doc.resolve(pos);
+      if (!$p.parent.canReplaceWith($p.index(), $p.index() + 1, type)) return false; // e.g. a heading as a list item
+      tr.setNodeMarkup(pos, type, { ...node.attrs, ...attrs });
+      return false;
     });
-    afterEdit();
+    if (tr.docChanged) editor.view.dispatch(tr);
   }
   function setLineSpacing(v) {
-    restoreSel();
-    let blocks = selectedBlocks();
-    if (!blocks.length) {
-      document.execCommand("formatBlock", false, "p");
-      blocks = selectedBlocks();
-    }
-    blocks.forEach((b) => (b.style.lineHeight = v));
-    afterEdit();
+    editor.commands.focus();
+    editor.ln.setBlockStyle({ "line-height": String(v) });
   }
   function paraSpace(which, add) {
-    restoreSel();
-    selectedBlocks().forEach((b) => {
-      b.style[which === "before" ? "marginTop" : "marginBottom"] = add
-        ? "10pt"
-        : "0";
-    });
-    afterEdit();
+    editor.commands.focus();
+    editor.ln.setBlockStyle({ [which === "before" ? "margin-top" : "margin-bottom"]: add ? "10pt" : null });
   }
   function toggleChecklist() {
-    restoreSel();
-    const el = anchorEl();
-    const ul = el && el.closest && el.closest("ul");
-    if (ul && page.contains(ul)) {
-      if (ul.classList.contains("checklist")) {
-        document.execCommand("insertUnorderedList");
-      } else ul.classList.add("checklist");
-    } else {
-      document.execCommand("insertUnorderedList");
-      const u = anchorEl().closest("ul");
-      if (u) u.classList.add("checklist");
+    const list = listAround();
+    if (list && list.node.type.name === "bulletList" && list.node.attrs.class === "checklist") {
+      chain().toggleBulletList().run(); // checklist off: back to normal paragraphs
+      return;
     }
-    afterEdit();
+    if (!list || list.node.type.name !== "bulletList") chain().toggleBulletList().run();
+    const l = listAround();
+    if (l && l.node.type.name === "bulletList")
+      editor.chain().focus().command(({ tr }) => {
+        tr.setNodeMarkup(l.pos, null, { ...l.node.attrs, class: "checklist" });
+        return true;
+      }).run();
   }
   function clearFormat() {
-    restoreSel();
-    document.execCommand("removeFormat");
-    document.execCommand("unlink");
-    selectedBlocks().forEach((b) => {
-      [
-        "lineHeight",
-        "marginTop",
-        "marginBottom",
-        "textAlign",
-        "marginLeft",
-        "textIndent",
-      ].forEach((p) => (b.style[p] = ""));
-      if (!b.getAttribute("style")) b.removeAttribute("style");
+    chain().unsetAllMarks().run();
+    editor.ln.setBlockStyle({
+      "line-height": null,
+      "margin-top": null,
+      "margin-bottom": null,
+      "text-align": null,
+      "margin-left": null,
+      "text-indent": null,
     });
-    afterEdit();
   }
   function setColor(kind, color) {
-    restoreSel();
-    if (color === null) {
-      if (kind === "hiliteColor")
-        document.execCommand("hiliteColor", false, "transparent");
-      else {
-        document.execCommand("foreColor", false, "rgb(1, 2, 3)");
-        $$('[style*="rgb(1, 2, 3)"], font[color="#010203"]', page).forEach(
-          (e) => {
-            e.style.color = "";
-            e.removeAttribute("color");
-            if (!e.getAttribute("style")) e.removeAttribute("style");
-          },
-        );
-      }
-    } else document.execCommand(kind, false, color);
-    if (kind === "hiliteColor")
+    if (kind === "hiliteColor") {
+      if (color === null) chain().unsetBackgroundColor().run();
+      else chain().setBackgroundColor(color).run();
       $("#hilite-bar").style.background = color || "transparent";
-    afterEdit();
+    } else {
+      if (color === null) chain().unsetColor().unsetMark("ink").run();
+      else chain().setColor(color).unsetMark("ink").run();
+    }
   }
 
   function insertHtmlAtCursor(html) {
-    restoreSel();
-    document.execCommand("insertHTML", false, html);
-    afterEdit();
+    chain().insertContent(LNEditor.normalizeHtml(html)).run();
   }
   function insertImages(srcs) {
     if (!srcs.length) return;
-    insertHtmlAtCursor(
-      srcs.map((s) => `<img src="${s}" style="width:50%">`).join(""),
-    );
+    chain()
+      .insertContent(srcs.map((src) => ({ type: "image", attrs: { src, style: "width: 50%;" } })))
+      .run();
   }
   function insertTable(rows, cols) {
-    const tr = `<tr>${"<td><br></td>".repeat(cols)}</tr>`;
-    insertHtmlAtCursor(
-      `<table class="ln-table"><tbody>${tr.repeat(rows)}</tbody></table><p><br></p>`,
-    );
+    chain().insertTable({ rows, cols, withHeaderRow: false }).run();
+    const $f = editor.state.selection.$from;
+    for (let d = $f.depth; d > 0; d--)
+      if ($f.node(d).type.name === "table") {
+        const pos = $f.before(d),
+          node = $f.node(d);
+        const tr = editor.state.tr.setNodeMarkup(pos, null, { ...node.attrs, class: "ln-table" });
+        // always leave a line after the table to carry on typing
+        const after = pos + node.nodeSize;
+        const next = tr.doc.resolve(after).nodeAfter;
+        if (!next || next.type.name !== "paragraph") tr.insert(after, editor.schema.nodes.paragraph.create());
+        editor.view.dispatch(tr);
+        break;
+      }
   }
 
   /* ---------------- table / image ops (from context menu) ---------------- */
   let ctxTarget = null;
+  // put the caret where the right-click happened, so table / image commands act on that spot
+  function caretToCtxTarget() {
+    if (!ctxTarget || !ed.contains(ctxTarget)) return false;
+    try {
+      const pos = editor.view.posAtDOM(ctxTarget, 0);
+      editor.chain().focus().setTextSelection(pos).run();
+      return true;
+    } catch {
+      return false;
+    }
+  }
   function tableOp(op) {
     const cell = ctxTarget && ctxTarget.closest && ctxTarget.closest("td,th");
-    if (!cell || !page.contains(cell)) return;
-    const tr = cell.parentElement,
-      table = cell.closest("table"),
-      idx = cell.cellIndex;
-    const blankRow = () => {
-      const r = tr.cloneNode(false);
-      [...tr.cells].forEach((c) => {
-        const n = document.createElement(c.tagName);
-        n.innerHTML = "<br>";
-        n.setAttribute("style", c.getAttribute("style") || "");
-        if (!n.getAttribute("style")) n.removeAttribute("style");
-        r.appendChild(n);
-      });
-      return r;
-    };
-    if (op === "rowAbove") tr.before(blankRow());
-    if (op === "rowBelow") tr.after(blankRow());
-    if (op === "colLeft" || op === "colRight")
-      [...table.rows].forEach((r) => {
-        const ref = r.cells[Math.min(idx, r.cells.length - 1)];
-        const n = document.createElement(ref ? ref.tagName : "td");
-        n.innerHTML = "<br>";
-        if (ref) op === "colLeft" ? ref.before(n) : ref.after(n);
-        else r.appendChild(n);
-      });
-    if (op === "delRow") {
-      tr.remove();
-      if (!table.rows.length) table.remove();
-    }
-    if (op === "delCol") {
-      [...table.rows].forEach((r) => r.cells[idx] && r.deleteCell(idx));
-      if (!table.rows[0] || !table.rows[0].cells.length) table.remove();
-    }
-    if (op === "delTable") table.remove();
-    afterEdit();
+    if (!cell || !ed.contains(cell)) return;
+    caretToCtxTarget();
+    const c = editor.chain().focus();
+    ({
+      rowAbove: () => c.addRowBefore(),
+      rowBelow: () => c.addRowAfter(),
+      colLeft: () => c.addColumnBefore(),
+      colRight: () => c.addColumnAfter(),
+      delRow: () => c.deleteRow(),
+      delCol: () => c.deleteColumn(),
+      delTable: () => c.deleteTable(),
+    })[op]?.().run();
   }
 
-  let selImg = null;
+  // Images: click one to select it, then use the bubble (size / alignment) or drag the corner.
+  let selImg = null; // { pos, dom }
   const imgBubble = $("#img-bubble"),
     imgHandle = $("#img-handle");
-  function selectImage(img) {
-    deselectImage();
-    selImg = img;
-    img.classList.add("sel");
-    positionImageUi();
+  function syncImageSelection() {
+    const sel = editor.state.selection;
+    if (sel instanceof NodeSelection && sel.node.type.name === "image") {
+      selImg = { pos: sel.from, dom: editor.view.nodeDOM(sel.from) };
+      positionImageUi();
+    } else if (selImg) deselectImage(true);
   }
-  function deselectImage() {
-    if (selImg) {
-      selImg.classList.remove("sel");
-      if (!selImg.className) selImg.removeAttribute("class");
-    }
+  function deselectImage(keepSelection) {
     selImg = null;
     imgBubble.hidden = true;
     imgHandle.hidden = true;
+    if (!keepSelection && editor.state.selection instanceof NodeSelection)
+      editor.commands.setTextSelection(editor.state.selection.to);
   }
   function positionImageUi() {
-    if (!selImg || !page.contains(selImg) || S.mode !== "editor") {
-      if (selImg && !page.contains(selImg)) deselectImage();
+    if (selImg) {
+      const sel = editor.state.selection;
+      if (!(sel instanceof NodeSelection) || sel.node.type.name !== "image") selImg = null;
+      else selImg = { pos: sel.from, dom: editor.view.nodeDOM(sel.from) };
+    }
+    if (!selImg || !selImg.dom || S.mode !== "editor") {
       imgBubble.hidden = true;
       imgHandle.hidden = true;
       return;
     }
-    const r = selImg.getBoundingClientRect();
+    const r = selImg.dom.getBoundingClientRect();
     imgHandle.hidden = false;
     imgHandle.style.left = r.right - 6 + "px";
     imgHandle.style.top = r.bottom - 6 + "px";
     imgBubble.hidden = false;
     const bw = imgBubble.offsetWidth;
-    imgBubble.style.left =
-      Math.max(8, Math.min(innerWidth - bw - 8, r.left)) + "px";
+    imgBubble.style.left = Math.max(8, Math.min(innerWidth - bw - 8, r.left)) + "px";
     const below = r.bottom + 8,
       above = r.top - imgBubble.offsetHeight - 8;
-    imgBubble.style.top =
-      (below + 40 < innerHeight ? below : Math.max(8, above)) + "px";
+    imgBubble.style.top = (below + 40 < innerHeight ? below : Math.max(8, above)) + "px";
   }
-  function imgOp(
-    v,
-    img = selImg || (ctxTarget && ctxTarget.tagName === "IMG" && ctxTarget),
-  ) {
-    if (!img) return;
+  // the image a command applies to: the selected one, or the one that was right-clicked
+  function targetImage() {
+    if (selImg) return selImg.pos;
+    if (ctxTarget && ctxTarget.tagName === "IMG" && ed.contains(ctxTarget)) {
+      try {
+        return editor.view.posAtDOM(ctxTarget, 0);
+      } catch {}
+    }
+    return null;
+  }
+  function patchImage(pos, props) {
+    const node = editor.state.doc.nodeAt(pos);
+    if (!node || node.type.name !== "image") return;
+    const style = LNEditor.patchStyle(node.attrs.style, props);
+    const tr = editor.state.tr.setNodeMarkup(pos, null, { ...node.attrs, style, width: null, height: null });
+    tr.setSelection(NodeSelection.create(tr.doc, pos));
+    editor.view.dispatch(tr);
+    positionImageUi();
+  }
+  function imgOp(v) {
+    const pos = targetImage();
+    if (pos === null) return;
     if (v === "delete") {
-      img.remove();
-      deselectImage();
-      afterEdit();
+      editor.view.dispatch(editor.state.tr.delete(pos, pos + 1));
+      deselectImage(true);
       return;
     }
-    img.style.width = v + "%";
-    img.style.height = "auto";
-    afterEdit();
-    positionImageUi();
+    patchImage(pos, { width: v + "%", height: "auto" });
   }
-  function imgAlign(
-    v,
-    img = selImg || (ctxTarget && ctxTarget.tagName === "IMG" && ctxTarget),
-  ) {
-    if (!img) return;
-    img.style.float = "";
-    if (v === "inline") {
-      img.style.display = "";
-      img.style.margin = "";
-    } else {
-      img.style.display = "block";
-      img.style.margin =
-        v === "center" ? "0 auto" : v === "left" ? "0 auto 0 0" : "0 0 0 auto";
-    }
-    if (!img.getAttribute("style")) img.removeAttribute("style");
-    afterEdit();
-    positionImageUi();
+  function imgAlign(v) {
+    const pos = targetImage();
+    if (pos === null) return;
+    const inline = v === "inline";
+    patchImage(pos, {
+      float: null,
+      display: inline ? null : "block",
+      margin: inline ? null : v === "center" ? "0 auto" : v === "left" ? "0 auto 0 0" : "0 0 0 auto",
+    });
   }
   imgBubble.addEventListener("mousedown", (e) => e.preventDefault());
   imgBubble.addEventListener("click", (e) => {
@@ -1040,23 +1025,27 @@
     if (b.dataset.imgalign) imgAlign(b.dataset.imgalign);
   });
   imgHandle.addEventListener("pointerdown", (e) => {
-    if (!selImg) return;
+    if (!selImg || !selImg.dom) return;
     e.preventDefault();
     imgHandle.setPointerCapture(e.pointerId);
+    const img = selImg.dom,
+      pos = selImg.pos;
     const startX = e.clientX,
-      w0 = selImg.getBoundingClientRect().width,
+      w0 = img.getBoundingClientRect().width,
       z = currentZoom();
-    const maxW = page.clientWidth - 2 * (PAGE_PAD[S.editorMargins] || 96);
+    const maxW = ed.clientWidth - 2 * (PAGE_PAD[S.editorMargins] || 96);
+    let w = w0 / z;
     const move = (ev) => {
-      selImg.style.width =
-        Math.max(16, Math.min(maxW, (w0 + ev.clientX - startX) / z)) + "px";
-      selImg.style.height = "auto";
-      positionImageUi();
+      w = Math.max(16, Math.min(maxW, (w0 + ev.clientX - startX) / z));
+      img.style.width = w + "px";
+      img.style.height = "auto";
+      imgHandle.style.left = img.getBoundingClientRect().right - 6 + "px";
+      imgHandle.style.top = img.getBoundingClientRect().bottom - 6 + "px";
     };
     const up = () => {
       imgHandle.removeEventListener("pointermove", move);
       imgHandle.removeEventListener("pointerup", up);
-      afterEdit();
+      patchImage(pos, { width: Math.round(w) + "px", height: "auto" });
     };
     imgHandle.addEventListener("pointermove", move);
     imgHandle.addEventListener("pointerup", up);
@@ -1071,33 +1060,21 @@
   });
 
   /* ---------------- page events ---------------- */
-  page.addEventListener("input", () => {
-    fixFontTags();
-    markDirty();
-  });
-  page.addEventListener("click", (e) => {
-    const img = e.target.closest("img");
-    if (img && page.contains(img)) {
-      selectImage(img);
-      return;
-    }
-    deselectImage();
+  ed.addEventListener("click", (e) => {
     const a = e.target.closest("a");
     if (a && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       api.call("open:external", a.href);
-      return;
-    }
-    // checklist toggle (click on the box)
-    const li = e.target.closest("ul.checklist > li");
-    if (li && e.clientX < li.getBoundingClientRect().left) {
-      li.dataset.checked = li.dataset.checked === "true" ? "false" : "true";
-      if (li.dataset.checked === "false") li.removeAttribute("data-checked");
-      markDirty();
     }
   });
-  page.addEventListener("contextmenu", (e) => {
+  ed.addEventListener("contextmenu", (e) => {
     ctxTarget = e.target;
+    if (e.target.tagName === "IMG") {
+      try {
+        const pos = editor.view.posAtDOM(e.target, 0);
+        editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
+      } catch {}
+    }
     api.ctxInfo({
       immersive: false,
       link: !!e.target.closest("a"),
@@ -1108,96 +1085,46 @@
   $("#imm").addEventListener("contextmenu", () =>
     api.ctxInfo({ immersive: true }),
   );
-  // "* " at the start of a line turns it into a bulleted list, like Google Docs / Word.
-  function autoBullet() {
-    const sel = getSelection();
-    if (!sel.rangeCount || !sel.isCollapsed) return false;
-    const block = anchorEl().closest("p,div,h1,h2,h3,h4,h5,h6,li,td,th");
-    if (!block || !page.contains(block) || block.closest("li,td,th")) return false;
-    const before = document.createRange();
-    before.setStart(block, 0);
-    before.setEnd(sel.anchorNode, sel.anchorOffset);
-    if (before.toString() !== "*") return false;
-    sel.removeAllRanges();
-    sel.addRange(before);
-    document.execCommand("delete"); // remove the "*" (stays undoable)
-    exec("insertUnorderedList");
-    return true;
-  }
-  page.addEventListener("keydown", (e) => {
-    if (e.key === " " && !e.ctrlKey && !e.altKey && !e.metaKey && autoBullet()) {
-      e.preventDefault();
-      return;
-    }
-    if (selImg && (e.key === "Delete" || e.key === "Backspace")) {
-      e.preventDefault();
-      imgOp("delete");
-      return;
-    }
-    if (e.key === "Tab") {
-      e.preventDefault();
-      const inList = anchorEl().closest("li");
-      if (inList) document.execCommand(e.shiftKey ? "outdent" : "indent");
-      else if (!e.shiftKey)
-        document.execCommand(
-          "insertHTML",
-          false,
-          '<span style="white-space:pre">\t</span>',
-        );
-      afterEdit();
-    }
-  });
-  page.addEventListener("focus", () => {
-    if (!page.innerHTML.trim()) page.innerHTML = "<p><br></p>";
-  });
 
   /* ---------------- paste & drop ---------------- */
-  let plainNext = false;
-  page.addEventListener("paste", async (e) => {
+  // Pastes from Google Docs / Word / web pages are cleaned up first (paste.js): their stylesheets
+  // become inline formatting, black text follows the theme, and images are copied in.
+  let plainNext = false,
+    pastingClean = false;
+  function handlePaste(e, view) {
+    if (pastingClean) return false; // our own cleaned paste going through ProseMirror
     const cd = e.clipboardData;
-    if (!cd) return;
+    if (!cd) return false;
     const html = cd.getData("text/html");
     const text = cd.getData("text/plain");
-    const files = [...(cd.files || [])].filter((f) =>
-      f.type.startsWith("image/"),
-    );
+    const files = [...(cd.files || [])].filter((f) => f.type.startsWith("image/"));
     if (plainNext) {
       plainNext = false;
-      e.preventDefault();
-      document.execCommand("insertText", false, text);
-      afterEdit();
-      return;
+      view.pasteText(text);
+      return true;
     }
     if (files.length && !html) {
-      e.preventDefault();
-      const srcs = await Promise.all(files.map(readAsDataUrl));
-      insertImages(srcs);
-      return;
+      Promise.all(files.map(readAsDataUrl)).then(insertImages);
+      return true;
     }
-    if (html) {
-      e.preventDefault();
-      const range = savedRange && savedRange.cloneRange();
-      let clean;
-      try {
-        clean = await cleanPastedHtml(html);
-      } catch (err) {
+    // copied from this editor: ProseMirror keeps the structure itself
+    if (!html || /data-pm-slice/.test(html)) return false;
+    cleanPastedHtml(html)
+      .catch((err) => {
         console.error(err);
-        clean = escHtml(text).replace(/\n/g, "<br>");
-      }
-      if (range) savedRange = range;
-      insertHtmlAtCursor(clean || escHtml(text));
-      inlineRemoteImages();
-      return;
-    }
-    // plain text: keep paragraphs
-    if (text && /\n/.test(text)) {
-      e.preventDefault();
-      const paras = text.replace(/\r/g, "").split("\n");
-      insertHtmlAtCursor(
-        paras.map((p) => `<p>${escHtml(p) || "<br>"}</p>`).join(""),
-      );
-    }
-  });
+        return escHtml(text).replace(/\n/g, "<br>");
+      })
+      .then((clean) => {
+        pastingClean = true;
+        try {
+          view.pasteHTML(LNEditor.normalizeHtml(clean || escHtml(text)));
+        } finally {
+          pastingClean = false;
+        }
+        inlineRemoteImages();
+      });
+    return true;
+  }
   function readAsDataUrl(file) {
     return new Promise((res, rej) => {
       const fr = new FileReader();
@@ -1206,63 +1133,60 @@
       fr.readAsDataURL(file);
     });
   }
+  // Images that point at the web or a temp file become part of the document, so they don't break later.
   async function inlineRemoteImages() {
-    const imgs = $$("img", page).filter((i) =>
-      /^(https?:|file:)/i.test(i.getAttribute("src") || ""),
-    );
-    if (!imgs.length) return;
-    let changed = false;
+    const todo = [];
+    editor.state.doc.descendants((n) => {
+      if (n.type.name === "image" && /^(https?:|file:)/i.test(n.attrs.src || "")) todo.push(n.attrs.src);
+    });
+    if (!todo.length) return;
+    const done = {};
     await Promise.all(
-      imgs.map(async (img) => {
-        const data = await api
-          .call("image:inline", img.getAttribute("src"))
-          .catch(() => null);
-        if (data) {
-          img.setAttribute("src", data);
-          changed = true;
-        } else if (/^file:/i.test(img.getAttribute("src"))) img.remove();
+      [...new Set(todo)].map(async (src) => {
+        done[src] = await api.call("image:inline", src).catch(() => null);
       }),
     );
-    if (changed) markDirty();
+    const tr = editor.state.tr;
+    const drop = [];
+    tr.doc.descendants((n, pos) => {
+      if (n.type.name !== "image" || !(n.attrs.src in done)) return;
+      if (done[n.attrs.src]) tr.setNodeMarkup(pos, null, { ...n.attrs, src: done[n.attrs.src] });
+      else if (/^file:/i.test(n.attrs.src)) drop.push(pos);
+    });
+    drop.reverse().forEach((pos) => tr.delete(pos, pos + 1));
+    if (tr.docChanged) editor.view.dispatch(tr);
   }
-  let internalDrag = false;
-  page.addEventListener("dragstart", () => {
-    internalDrag = true;
-  });
-  page.addEventListener("dragend", () => {
-    internalDrag = false;
-  });
-  page.addEventListener("drop", async (e) => {
-    if (internalDrag) return;
+  function handleDrop(e, view, moved) {
+    if (moved) return false; // dragging inside the document
     const dt = e.dataTransfer;
     const files = [...dt.files].filter((f) => f.type.startsWith("image/"));
     const html = dt.getData("text/html");
-    if (!files.length && !html) return;
+    if (!files.length && !html) return false;
     e.preventDefault();
-    const pos = document.caretRangeFromPoint(e.clientX, e.clientY);
-    if (pos) savedRange = pos;
-    if (files.length) insertImages(await Promise.all(files.map(readAsDataUrl)));
-    else {
-      insertHtmlAtCursor(await cleanPastedHtml(html));
-      inlineRemoteImages();
-    }
-  });
+    const at = view.posAtCoords({ left: e.clientX, top: e.clientY });
+    if (at) editor.commands.setTextSelection(at.pos);
+    if (files.length) Promise.all(files.map(readAsDataUrl)).then(insertImages);
+    else
+      cleanPastedHtml(html).then((clean) => {
+        insertHtmlAtCursor(clean);
+        inlineRemoteImages();
+      });
+    return true;
+  }
   document.addEventListener("dragover", (e) => e.preventDefault());
   document.addEventListener("drop", (e) => {
-    if (!page.contains(e.target)) e.preventDefault();
+    if (!ed.contains(e.target)) e.preventDefault();
   });
 
   /* ---------------- link bubble ---------------- */
   const linkBubble = $("#link-bubble");
-  let bubbleLink = null;
+  let bubbleHref = null;
   function updateLinkBubble() {
-    const el = anchorEl();
-    const a = el && el.closest && el.closest("a");
-    if (!a || !page.contains(a) || S.mode !== "editor") return hideLinkBubble();
-    bubbleLink = a;
-    $("#lb-url").textContent = a.getAttribute("href") || "(no link)";
+    if (!editor.isActive("link") || S.mode !== "editor" || !editor.isFocused) return hideLinkBubble();
+    bubbleHref = editor.getAttributes("link").href || "";
+    $("#lb-url").textContent = bubbleHref || "(no link)";
     $("#lb-url").href = "#";
-    const r = a.getBoundingClientRect();
+    const r = editor.view.coordsAtPos(editor.state.selection.from);
     linkBubble.hidden = false;
     linkBubble.style.left =
       Math.max(8, Math.min(innerWidth - linkBubble.offsetWidth - 8, r.left)) +
@@ -1271,22 +1195,19 @@
   }
   function hideLinkBubble() {
     linkBubble.hidden = true;
-    bubbleLink = null;
+    bubbleHref = null;
   }
   linkBubble.addEventListener("mousedown", (e) => e.preventDefault());
   $("#lb-url").onclick = (e) => {
     e.preventDefault();
-    if (bubbleLink) api.call("open:external", bubbleLink.href);
+    if (bubbleHref) api.call("open:external", bubbleHref);
   };
   $("#lb-edit").onclick = () => openLinkDialog();
   $("#lb-remove").onclick = () => {
-    if (!bubbleLink) return;
-    const r = document.createRange();
-    r.selectNodeContents(bubbleLink);
-    savedRange = r;
-    exec("unlink");
+    chain().extendMarkRange("link").unsetLink().run();
     hideLinkBubble();
   };
+  editor.on("blur", () => setTimeout(() => { if (!editor.isFocused) hideLinkBubble(); }, 150));
 
   /* ---------------- dialogs ---------------- */
   const back = $("#modal-back");
@@ -1344,17 +1265,13 @@
   }
 
   function openLinkDialog() {
-    restoreSel();
-    const el = anchorEl();
-    const a = el && el.closest && el.closest("a");
-    const sel = getSelection();
-    let range = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
-    if (a) {
-      range = document.createRange();
-      range.selectNodeContents(a);
-    }
-    $("#link-text").value = a ? a.textContent : range ? range.toString() : "";
-    $("#link-url").value = a ? a.getAttribute("href") : "";
+    editor.commands.focus();
+    const inLink = editor.isActive("link");
+    if (inLink) editor.commands.extendMarkRange("link");
+    const { from, to } = editor.state.selection;
+    const selText = editor.state.doc.textBetween(from, to, " ");
+    $("#link-text").value = selText;
+    $("#link-url").value = inLink ? editor.getAttributes("link").href || "" : "";
     openDialog("dlg-link");
     setTimeout(
       () => ($("#link-text").value ? $("#link-url") : $("#link-text")).focus(),
@@ -1369,19 +1286,13 @@
       if (!/^(https?:|mailto:|#)/i.test(url))
         url =
           (/^[^@\s]+@[^@\s]+\.\w+$/.test(url) ? "mailto:" : "https://") + url;
-      if (a) {
-        a.setAttribute("href", url);
-        if (a.textContent !== text) a.textContent = text;
-        afterEdit();
-        return;
-      }
-      savedRange = range;
-      if (range && !range.collapsed && range.toString() === text)
-        exec("createLink", url);
+      const c = editor.chain().focus().setTextSelection({ from, to });
+      if (from !== to && text === selText) c.setLink({ href: url }).run();
       else
-        insertHtmlAtCursor(
-          `<a href="${escHtml(url)}">${escHtml(text)}</a>&nbsp;`,
-        );
+        c.insertContent([
+          { type: "text", text, marks: [{ type: "link", attrs: { href: url } }] },
+          ...(from === to ? [{ type: "text", text: " " }] : []),
+        ]).run();
     };
     $("#link-apply").onclick = apply;
     $("#link-url").onkeydown = $("#link-text").onkeydown = (e) => {
@@ -1392,20 +1303,27 @@
     };
   }
 
+  function docText() {
+    const d = editor.state.doc;
+    return d.textBetween(0, d.content.size, "\n", " ");
+  }
   function showWordCount() {
-    const text = page.innerText || "";
-    const sel = getSelection();
-    const selText =
-      sel.rangeCount && page.contains(sel.anchorNode) ? sel.toString() : "";
+    const text = docText();
+    const { from, to } = editor.state.selection;
+    const selText = from !== to ? editor.state.doc.textBetween(from, to, "\n", " ") : "";
     const words = (t) => (t.match(/\S+/g) || []).length;
+    let paras = 0;
+    editor.state.doc.descendants((n) => {
+      if (n.isTextblock) {
+        if (n.textContent.trim()) paras++;
+        return false;
+      }
+    });
     const rows = [
       ["Words", words(text)],
       ["Characters", text.replace(/\n/g, "").length],
       ["Characters excluding spaces", text.replace(/\s/g, "").length],
-      [
-        "Paragraphs",
-        $$("p,h1,h2,h3,h4,li", page).filter((p) => p.textContent.trim()).length,
-      ],
+      ["Paragraphs", paras],
     ];
     if (selText) rows.unshift(["Words in selection", words(selText)]);
     $("#word-stats").innerHTML = rows
@@ -1414,7 +1332,7 @@
     openDialog("dlg-words");
   }
   function updateWordCount() {
-    const n = ((page.innerText || "").match(/\S+/g) || []).length;
+    const n = (docText().match(/\S+/g) || []).length;
     $("#word-count").textContent =
       `${n.toLocaleString()} word${n === 1 ? "" : "s"}`;
   }
@@ -1547,10 +1465,7 @@
     };
   }
   function spacingPopover(btn) {
-    const blk = selectedBlocks()[0];
-    const curLh = blk
-      ? blk.style.lineHeight || String(S.defaultLineSpacing)
-      : "";
+    const curLh = editor.ln.blockStyle("line-height") || String(S.defaultLineSpacing);
     const opt = (v, l) =>
       `<button data-ls="${v}" class="${String(curLh) === String(v) ? "on" : ""}">${l}</button>`;
     showPopover(
@@ -1647,7 +1562,7 @@
   }
   zoomSel.onchange = (e) => {
     setZoom(e.target.value);
-    page.focus();
+    editor.commands.focus();
   };
   $("#zoom-in").onclick = () => stepZoom(1);
   $("#zoom-out").onclick = () => stepZoom(-1);
@@ -1690,14 +1605,11 @@
   let findOpen = false,
     findRanges = [],
     findIdx = -1;
-  const hasHighlights =
-    typeof CSS !== "undefined" &&
-    CSS.highlights &&
-    typeof Highlight !== "undefined";
   function openFind(replace) {
     findOpen = true;
     $("#findbar").hidden = false;
-    const sel = getSelection().toString();
+    const { from, to } = editor.state.selection;
+    const sel = from !== to ? editor.state.doc.textBetween(from, to, "\n") : "";
     if (sel && sel.length < 80 && !sel.includes("\n"))
       $("#find-input").value = sel;
     (replace ? $("#replace-input") : $("#find-input")).focus();
@@ -1709,32 +1621,12 @@
     $("#findbar").hidden = true;
     findRanges = [];
     findIdx = -1;
-    if (hasHighlights) {
-      CSS.highlights.delete("find");
-      CSS.highlights.delete("find-current");
-    }
-    restoreSel();
+    editor.ln.clearFind();
+    editor.commands.focus();
   }
   function runFind(keepIdx) {
     const q = $("#find-input").value;
-    const mc = $("#find-case").checked;
-    findRanges = [];
-    if (q) {
-      const needle = mc ? q : q.toLowerCase();
-      const tw = document.createTreeWalker(page, NodeFilter.SHOW_TEXT);
-      while (tw.nextNode()) {
-        const n = tw.currentNode,
-          hay = mc ? n.nodeValue : n.nodeValue.toLowerCase();
-        let i = hay.indexOf(needle);
-        while (i >= 0) {
-          const r = document.createRange();
-          r.setStart(n, i);
-          r.setEnd(n, i + q.length);
-          findRanges.push(r);
-          i = hay.indexOf(needle, i + q.length);
-        }
-      }
-    }
+    findRanges = editor.ln.findAll(q, $("#find-case").checked);
     findIdx = findRanges.length
       ? Math.min(keepIdx ? Math.max(0, findIdx) : 0, findRanges.length - 1)
       : -1;
@@ -1747,17 +1639,13 @@
         ? `${findIdx + 1} of ${findRanges.length}`
         : "0 of 0"
       : "";
-    if (!hasHighlights) return;
-    CSS.highlights.set("find", new Highlight(...findRanges));
-    if (findIdx >= 0) {
-      CSS.highlights.set("find-current", new Highlight(findRanges[findIdx]));
-      if (scroll) {
-        const r = findRanges[findIdx].getBoundingClientRect(),
-          c = canvas.getBoundingClientRect();
-        if (r.top < c.top + 40 || r.bottom > c.bottom - 40)
-          canvas.scrollTop += r.top - c.top - c.height / 3;
-      }
-    } else CSS.highlights.delete("find-current");
+    editor.ln.find($("#find-input").value, $("#find-case").checked, findIdx);
+    if (scroll && findIdx >= 0) {
+      const r = editor.view.coordsAtPos(findRanges[findIdx].from),
+        c = canvas.getBoundingClientRect();
+      if (r.top < c.top + 40 || r.bottom > c.bottom - 40)
+        canvas.scrollTop += r.top - c.top - c.height / 3;
+    }
   }
   function findStep(d) {
     if (!findRanges.length) return;
@@ -1767,12 +1655,11 @@
   function replaceOne() {
     if (findIdx < 0) return;
     const r = findRanges[findIdx];
-    const sel = getSelection();
-    page.focus();
-    sel.removeAllRanges();
-    sel.addRange(r);
-    document.execCommand("insertText", false, $("#replace-input").value);
-    afterEdit();
+    const rep = $("#replace-input").value;
+    const tr = editor.state.tr;
+    if (rep) tr.insertText(rep, r.from, r.to);
+    else tr.delete(r.from, r.to);
+    editor.view.dispatch(tr);
     runFind(true);
     paintFind();
     $("#replace-input").focus();
@@ -1781,14 +1668,13 @@
     if (!findRanges.length) return;
     const n = findRanges.length,
       rep = $("#replace-input").value;
-    page.focus();
+    const tr = editor.state.tr;
     for (let i = findRanges.length - 1; i >= 0; i--) {
-      const sel = getSelection();
-      sel.removeAllRanges();
-      sel.addRange(findRanges[i]);
-      document.execCommand("insertText", false, rep);
+      const r = findRanges[i];
+      if (rep) tr.insertText(rep, r.from, r.to);
+      else tr.delete(r.from, r.to);
     }
-    afterEdit();
+    editor.view.dispatch(tr);
     runFind();
     toast(`Replaced ${n} occurrence${n === 1 ? "" : "s"}`);
   }
@@ -1819,7 +1705,7 @@
     const m = (PAGE_PAD[S.editorMargins] || 96) / 96;
     return `@page{size:letter;margin:${m}in}body{margin:0;font-family:"${S.defaultFont}",Arial,sans-serif;font-size:${S.defaultFontSize}pt;line-height:${S.defaultLineSpacing};color:#000;overflow-wrap:break-word}
 p,div{margin:0}h1,h2,h3,h4{font-weight:700;margin:0;line-height:1.15;font-size:10pt}h1{padding:8pt 0 2pt}h2{padding:6pt 0 2pt}h3{padding:5pt 0 1pt;color:#434343}h4{padding:4pt 0 1pt;color:#666;font-style:italic}
-h1.title{font-size:10pt;padding:0 0 3pt}p.subtitle{font-size:10pt;color:#666;padding:0 0 6pt}ul,ol{margin:0;padding-left:3.2em}li>p{display:inline}img{max-width:100%;height:auto}
+h1.title{font-size:10pt;padding:0 0 3pt}p.subtitle{font-size:10pt;color:#666;padding:0 0 6pt}ul,ol{margin:0;padding-left:3.2em}ol ol{list-style-type:lower-alpha}ol ol ol{list-style-type:lower-roman}.page-break{break-after:page}img{max-width:100%;height:auto}
 table{border-collapse:collapse;margin:4pt 0}table.ln-table{width:100%;table-layout:fixed}td,th{border:1px solid #9e9e9e;padding:4px 6px;vertical-align:top}hr{border:0;border-top:1px solid #9e9e9e}
 blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-checked=true]{text-decoration:line-through}a{color:#1155cc}`;
   }
@@ -1970,6 +1856,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       { id: "table", label: "Table" },
       { id: "link", label: "Link", accel: "CmdOrCtrl+K" },
       { id: "hr", label: "Horizontal line" },
+      { id: "pageBreak", label: "Page break", accel: "CmdOrCtrl+Enter" },
       { id: "date", label: "Date" },
       { id: "checklist", label: "Checklist" },
     ],
@@ -2056,7 +1943,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     ],
     tools: () => [
       { id: "wordCount", label: "Word count", accel: "CmdOrCtrl+Shift+C" },
-      { id: "spell", label: "Spell check", checked: page.spellcheck },
+      { id: "spell", label: "Spell check", checked: ed.spellcheck },
       { type: "separator" },
       {
         id: "update",
@@ -2118,16 +2005,17 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       case "undo":
       case "redo":
         return exec(cmd);
+      case "selectAll":
+        return chain().selectAll().run();
       case "cut":
       case "copy":
       case "paste":
-      case "selectAll":
-        restoreSel();
+        editor.commands.focus();
         return api.call("edit:native", cmd);
       case "delSel":
         return exec("delete");
       case "pastePlain":
-        restoreSel();
+        editor.commands.focus();
         plainNext = true;
         setTimeout(() => (plainNext = false), 600);
         return api.call("edit:native", "paste");
@@ -2163,24 +2051,19 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
         return setSetting({ alwaysOnTop: !S.alwaysOnTop });
       case "image": {
         const srcs = await safeCall("image:pick");
-        restoreSel();
         return insertImages(srcs);
       }
       case "table":
         return tablePopover(srcEl || $('.tb[data-cmd="table"]'));
       case "link":
         return openLinkDialog();
-      case "unlink": {
-        const a = ctxTarget && ctxTarget.closest && ctxTarget.closest("a");
-        if (a) {
-          const r = document.createRange();
-          r.selectNodeContents(a);
-          savedRange = r;
-        }
-        return exec("unlink");
-      }
+      case "unlink":
+        caretToCtxTarget();
+        return chain().extendMarkRange("link").unsetLink().run();
       case "hr":
-        return exec("insertHorizontalRule");
+        return chain().setHorizontalRule().run();
+      case "pageBreak":
+        return chain().insertPageBreak().run();
       case "date":
         return insertHtmlAtCursor(
           escHtml(
@@ -2213,11 +2096,11 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       case "wordCount":
         return showWordCount();
       case "spell":
-        page.spellcheck = !page.spellcheck;
-        ls.set("spell", page.spellcheck);
-        $('.tb[data-cmd="spell"]').classList.toggle("on", !page.spellcheck);
-        page.blur();
-        page.focus();
+        ed.spellcheck = !ed.spellcheck;
+        ls.set("spell", ed.spellcheck);
+        $('.tb[data-cmd="spell"]').classList.toggle("on", !ed.spellcheck);
+        ed.blur();
+        editor.commands.focus();
         return;
       case "settings":
         return openSettings();
@@ -2255,7 +2138,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     ff.add(o);
   });
   ff.onchange = () => {
-    exec("fontName", ff.value);
+    chain().setFontFamily(ff.value).run();
   };
   $("#block-style").onchange = (e) => setBlockStyle(e.target.value);
   const fsInput = $("#font-size");
@@ -2265,13 +2148,13 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       setFontSize(parseFloat(fsInput.value));
     }
     if (e.key === "Escape") {
-      restoreSel();
+      editor.commands.focus();
       updateToolbar();
     }
   });
   fsInput.addEventListener("focus", () => fsInput.select());
   if (ls.get("spell", true) === false) {
-    page.spellcheck = false;
+    ed.spellcheck = false;
     $('.tb[data-cmd="spell"]').classList.add("on");
   }
 
@@ -2314,7 +2197,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       Immersive.setActive(false);
       setTimeout(() => {
         applyZoom();
-        restoreSel();
+        editor.commands.focus(null, { scrollIntoView: false });
+        editor.ln.paginate();
       }, 50);
     }
   }
@@ -2534,7 +2418,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
     );
     $("#set-folder").textContent = S.docsFolder;
     $("#set-folder").title = S.docsFolder;
-    $("#set-version").textContent = `Lecture Notes ${S.version || ""}`;
+    $("#set-version").textContent = `Interview Notes ${S.version || ""}`;
     showShortcutErrors();
   }
   function showShortcutErrors() {
@@ -2772,11 +2656,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       toast(`Downloading version ${u.version} in the background…`);
   }
   async function installUpdate() {
+    // (the main process shows an "Updating Interview Notes" screen while it installs)
     applyUpdateStatus({ ...update, state: "installing" });
-    toast(
-      `Installing version ${update.version} — the app will reopen in a moment…`,
-      10000,
-    );
     await saveNow().catch(() => {});
     await api.call("update:install");
   }
@@ -2823,6 +2704,8 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       return;
     }
     if (!back.hidden) return;
+    // the editor handled it already (Ctrl+B, Ctrl+Z, Ctrl+Shift+8, Ctrl+Alt+1, …)
+    if (e.defaultPrevented) return;
     if (e.key === "F11") {
       e.preventDefault();
       return run("fullscreen");
@@ -2973,6 +2856,7 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
   else await newDoc("");
   applyMode(S.mode);
   showShortcutErrors();
+  if (S.updatedFrom) toast(`Interview Notes was updated to version ${S.version}`, 5000);
   api
     .call("update:status")
     .then(applyUpdateStatus)
@@ -2985,6 +2869,6 @@ blockquote{margin:0 0 0 40px}ul.checklist{list-style:none}ul.checklist li[data-c
       return S;
     },
     openDoc,
-    page,
+    editor,
   };
 })();

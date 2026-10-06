@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https: http: file:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:">
-<title>Lecture Notes</title>
+<title>Interview Notes</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body class="mode-editor">
@@ -23,7 +23,7 @@
     <button class="icon-btn" id="btn-fullscreen" title="Full screen (F11)" data-icon="fullscreen"></button>
     <button class="icon-btn" id="btn-settings" title="Settings (Ctrl+,)" data-icon="sliders"></button>
     <button class="icon-btn" id="btn-hide" title="Hide (Ctrl+])" data-icon="minus"></button>
-    <button class="icon-btn" id="btn-close" title="Close Lecture Notes — quits the app (Alt+F4)" data-icon="x"></button>
+    <button class="icon-btn" id="btn-close" title="Close Interview Notes — quits the app (Alt+F4)" data-icon="x"></button>
   </header>
 
   <nav id="menubar">
@@ -108,7 +108,10 @@
     </aside>
     <div id="canvas">
       <div id="page-wrap">
-        <div id="page" contenteditable="true" spellcheck="true"></div>
+        <div id="sheet">
+          <div id="pages"><div></div></div>
+          <div id="page"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -226,8 +229,8 @@
       </section>
       <section>
         <h3>Window</h3>
-        <div class="row"><span>Minimize to the tray<small class="row-hint">Off: minimizing puts Lecture Notes on the taskbar like any app. On: it hides in the tray's hidden icons (^ by the clock) — click the icon there or press <b class="k" data-accel="toggleShortcut"></b> to bring it back.</small></span><label class="switch"><input type="checkbox" data-setting="minimizeToTray"><i></i></label></div>
-        <div class="row"><span>Start with Windows<small class="row-hint">Open Lecture Notes automatically when you sign in.</small></span><label class="switch"><input type="checkbox" data-setting="launchAtStartup"><i></i></label></div>
+        <div class="row"><span>Minimize to the tray<small class="row-hint">Off: minimizing puts Interview Notes on the taskbar like any app. On: it hides in the tray's hidden icons (^ by the clock) — click the icon there or press <b class="k" data-accel="toggleShortcut"></b> to bring it back.</small></span><label class="switch"><input type="checkbox" data-setting="minimizeToTray"><i></i></label></div>
+        <div class="row"><span>Start with Windows<small class="row-hint">Open Interview Notes automatically when you sign in.</small></span><label class="switch"><input type="checkbox" data-setting="launchAtStartup"><i></i></label></div>
       </section>
       <section>
         <h3>Editor</h3>
@@ -239,7 +242,7 @@
       <section>
         <h3>Keyboard shortcuts</h3>
         <p class="sec-intro">These work even while you're in another app. Click a box and press the new keys to change one.</p>
-        <div class="row"><span>Show / hide Lecture Notes</span><div class="sc-wrap"><input class="shortcut" data-setting="toggleShortcut" readonly><small class="sc-err" data-err="toggleShortcut"></small></div></div>
+        <div class="row"><span>Show / hide Interview Notes</span><div class="sc-wrap"><input class="shortcut" data-setting="toggleShortcut" readonly><small class="sc-err" data-err="toggleShortcut"></small></div></div>
         <div class="row"><span>Switch editor ↔ overlay</span><div class="sc-wrap"><input class="shortcut" data-setting="immersiveShortcut" readonly><small class="sc-err" data-err="immersiveShortcut"></small></div></div>
         <div class="row"><span>Change lines shown<small class="row-hint">Steps 1 → 2 → custom → 25 lines.</small></span><div class="sc-wrap"><input class="shortcut" data-setting="linesShortcut" readonly><small class="sc-err" data-err="linesShortcut"></small></div></div>
         <div class="row"><span>Change overlay opacity<small class="row-hint">Steps 100 → 80 → 60 → 40 → 20%.</small></span><div class="sc-wrap"><input class="shortcut" data-setting="opacityShortcut" readonly><small class="sc-err" data-err="opacityShortcut"></small></div></div>
@@ -262,7 +265,7 @@
       </section>
       <section class="about">
         <span id="set-version"></span>
-        <button class="text-btn danger" id="set-quit">Quit Lecture Notes</button>
+        <button class="text-btn danger" id="set-quit">Quit Interview Notes</button>
       </section>
     </div>
   </div>
@@ -272,6 +275,7 @@
 
 <script src="icons.js"></script>
 <script src="paste.js"></script>
+<script src="editor.bundle.js"></script>
 <script src="immersive.js"></script>
 <script src="app.js"></script>
 </body>

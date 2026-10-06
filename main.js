@@ -1,4 +1,4 @@
-// Lecture Notes — main process
+// Interview Notes — main process
 const {
   app, BrowserWindow, globalShortcut, ipcMain, nativeTheme, screen,
   Tray, Menu, dialog, shell, nativeImage, net
@@ -15,6 +15,12 @@ const TEST_OFFSET = TEST_HIDDEN ? -30000 : 0;
 if (TEST_HIDDEN) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 // Tests can opt in to real global shortcuts (use keys the user's own copy doesn't hold).
 const SHORTCUTS_ON = !TEST_HIDDEN || process.env.LN_TEST_SHORTCUTS === '1';
+// Until 2.0 the app was called "Lecture Notes". Copies updated from then keep using that settings
+// folder (settings, documents folder, shortcuts, zoom) — only new installs get "Interview Notes".
+{
+  const legacy = path.join(app.getPath('appData'), 'Lecture Notes');
+  if (!app.commandLine.hasSwitch('user-data-dir') && fs.existsSync(path.join(legacy, 'settings.json'))) app.setPath('userData', legacy);
+}
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
@@ -31,7 +37,7 @@ const DEFAULTS = {
   immersiveHeadings: 'flat',             // flat (same size as text) | original
   anywhereScroll: 'alt',                 // modifier for scrolling immersive from any app: alt | ctrl+alt | shift+alt | ctrl+shift | off
   headingScroll: 'ctrl+alt',             // modifier + scroll = previous / next heading (overlay: from any app): same choices
-  docsFolder: path.join(app.getPath('documents'), 'Lecture Notes'),
+  docsFolder: path.join(app.getPath('documents'), 'Interview Notes'),
   immersiveMargins: 'narrow',            // none | narrow | normal | wide
   editorMargins: 'normal',               // narrow | normal | wide
   overlayOpacity: 1,                     // whole overlay (text + background)
@@ -53,7 +59,8 @@ const DEFAULTS = {
   lastDoc: null,
   sidebarOpen: false,
   readPositions: {},
-  lastAutoUpdate: null                   // version last auto-installed at launch (stops a retry loop if it fails)
+  lastAutoUpdate: null,                  // version last auto-installed at launch (stops a retry loop if it fails)
+  lastRunVersion: null                   // to say "Updated to …" after an update
 };
 
 let settings = loadSettings();
@@ -89,6 +96,9 @@ function saveSettingsNow() {
     fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
   } catch (e) { console.error('settings save failed', e); }
 }
+// "Updated to 2.0.0" is shown once after an update.
+const updatedFrom = settings.lastRunVersion && settings.lastRunVersion !== app.getVersion() ? settings.lastRunVersion : null;
+if (settings.lastRunVersion !== app.getVersion()) { settings.lastRunVersion = app.getVersion(); saveSettingsNow(); }
 
 /* ---------------- window ---------------- */
 function defaultBounds(mode) {
@@ -128,7 +138,7 @@ function createWindow() {
     show: false,
     alwaysOnTop: false,                  // set by applyAlwaysOnTop()
     skipTaskbar: settings.mode === 'immersive',   // the overlay stays out of the taskbar (tray icon still has it)
-    title: 'Lecture Notes',
+    title: 'Interview Notes',
     icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -426,7 +436,7 @@ let lastHeadingWheel = 0;
 function createTray() {
   const img = nativeImage.createFromPath(path.join(__dirname, 'build', 'tray.png'));
   tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img);
-  tray.setToolTip('Lecture Notes');
+  tray.setToolTip('Interview Notes');
   refreshTrayMenu();
   tray.on('click', toggleVisible);
 }
@@ -442,7 +452,7 @@ function refreshTrayMenu() {
       ? { label: `Restart to update (v${updateStatus.version})`, click: () => { showWindow(); win.webContents.send('cmd', 'update'); } }
       : { label: 'Check for updates', enabled: !!updater, click: () => { showWindow(); win.webContents.send('cmd', 'update'); } },
     { type: 'separator' },
-    { label: 'Quit Lecture Notes', click: () => { quitting = true; app.quit(); } }
+    { label: 'Quit Interview Notes', click: () => { quitting = true; app.quit(); } }
   ]));
 }
 
@@ -495,13 +505,44 @@ async function checkForUpdates() {
   try { await updater.checkForUpdates(); } catch (e) { updateFailed(e); }
   return updateStatus;
 }
+// Installing closes the app for a few seconds, so say so first: the app window goes away and a
+// small "Updating Interview Notes" screen explains that it will reopen by itself. Then the
+// installer's own progress window takes over until the new version opens.
 function installUpdate() {
   if (!updater || updateStatus.state !== 'ready') return;
   settings.lastAutoUpdate = updateStatus.version;
   saveSettingsNow();
   updateStatus = { ...updateStatus, state: 'installing' };
   quitting = true;
-  setImmediate(() => updater.quitAndInstall(true, true)); // silent install, then reopen the app
+  showUpdateScreen(updateStatus.version);
+  hideToast();
+  if (win && !win.isDestroyed()) win.hide();
+  setTimeout(() => updater.quitAndInstall(false, true), 2500); // installer with its progress bar, then reopen the app
+}
+let updateWin = null;
+function showUpdateScreen(version) {
+  if (TEST_HIDDEN && process.env.LN_TEST_UPDATE_SCREEN !== '1') return;
+  const dark = nativeTheme.shouldUseDarkColors;
+  const c = dark ? { bg: '#1f1f1f', text: '#e3e3e3', muted: '#9aa0a6', track: '#3c4043', bar: '#a8c7fa' }
+    : { bg: '#ffffff', text: '#1f1f1f', muted: '#5f6368', track: '#e3e8ef', bar: '#0b57d0' };
+  const html = `<!doctype html><meta charset="utf-8"><title>Updating Interview Notes</title><style>
+    html,body{margin:0;height:100%;background:${c.bg};color:${c.text};font:13px/1.45 'Segoe UI Variable Text','Segoe UI',sans-serif;overflow:hidden;user-select:none}
+    body{display:flex;flex-direction:column;justify-content:center;padding:0 30px;box-sizing:border-box;border:1px solid ${c.track}}
+    h1{font-size:17px;font-weight:600;margin:0 0 6px}p{margin:0;color:${c.muted}}
+    .track{height:4px;border-radius:2px;background:${c.track};overflow:hidden;margin:18px 0 12px}
+    .bar{height:100%;width:35%;border-radius:2px;background:${c.bar};animation:m 1.3s ease-in-out infinite}
+    @keyframes m{0%{transform:translateX(-100%)}100%{transform:translateX(290%)}}
+  </style><h1>Updating Interview Notes</h1>
+  <p>Installing version ${String(version).replace(/[<&]/g, '')}. The app will close and reopen by itself in a few seconds &mdash; you don&rsquo;t need to do anything.</p>
+  <div class="track"><div class="bar"></div></div><p>Your notes are saved.</p>`;
+  updateWin = new BrowserWindow({
+    width: 440, height: 200, show: false, frame: false, resizable: false, movable: true, minimizable: false,
+    maximizable: false, alwaysOnTop: true, skipTaskbar: false, center: true, title: 'Updating Interview Notes',
+    backgroundColor: c.bg, icon: path.join(__dirname, 'build', 'icon.png'),
+    webPreferences: { contextIsolation: true, sandbox: true, javascript: false }
+  });
+  updateWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html)).catch(() => {});
+  updateWin.once('ready-to-show', () => updateWin && !updateWin.isDestroyed() && updateWin.show());
 }
 
 /* ---------------- context menu (spelling, table, image) ---------------- */
@@ -566,7 +607,7 @@ async function uniquePath(dir, base, ext) {
 }
 function wrapHtml(title, body) {
   return `<!doctype html>\n<html><head><meta charset="utf-8"><title>${title.replace(/</g, '&lt;')}</title>` +
-    `<meta name="generator" content="Lecture Notes"></head>\n<body>\n${body}\n</body></html>\n`;
+    `<meta name="generator" content="Interview Notes"></head>\n<body>\n${body}\n</body></html>\n`;
 }
 function bodyOf(html) {
   const m = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
@@ -598,7 +639,7 @@ async function listTree(dirAbs) {
   try { entries = await fsp.readdir(dirAbs, { withFileTypes: true }); } catch { return []; }
   const out = [];
   for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
+    if (e.name.startsWith('.') || e.name === 'node_modules') continue;
     const abs = path.join(dirAbs, e.name);
     if (e.isDirectory()) {
       out.push({ type: 'folder', name: e.name, rel: relOf(abs), children: await listTree(abs) });
@@ -611,8 +652,8 @@ async function listTree(dirAbs) {
   return out;
 }
 
-const WELCOME = `<h1>Welcome to Lecture Notes</h1>
-<p>This is a normal document — type, paste from Google Docs or Word, add images and tables.</p>
+const WELCOME = `<h1>Welcome to Interview Notes</h1>
+<p>This is a normal document — type, paste from Google Docs or Word, add images and tables. Pages show like Google Docs; Ctrl + Enter starts a new page.</p>
 <p><b>Shortcuts</b></p>
 <ul><li><b>Ctrl + ]</b> — show / hide the overlay (works from any app)</li>
 <li><b>Ctrl + Alt + I</b> — switch between editor and immersive mode</li>
@@ -640,7 +681,7 @@ function handle(ch, fn) {
 function setupIpc() {
   ipcMain.on('ctx-info', (e, info) => { ctxInfo = info || {}; e.returnValue = true; });
 
-  handle('settings:get', () => ({ ...settings, shortcutErrors, platform: process.platform, version: app.getVersion() }));
+  handle('settings:get', () => ({ ...settings, shortcutErrors, platform: process.platform, version: app.getVersion(), updatedFrom }));
   handle('settings:set', async (patch) => {
     const old = { ...settings };
     Object.assign(settings, patch);
@@ -854,7 +895,7 @@ async function renderOffscreen(title, body, pageCss, fn) {
   const w = new BrowserWindow({ show: false, webPreferences: { javascript: false } });
   try {
     const html = wrapHtml(title, `<style>${pageCss}</style>` + body);
-    const tmp = path.join(app.getPath('temp'), `lecture-notes-print-${Date.now()}.html`);
+    const tmp = path.join(app.getPath('temp'), `interview-notes-print-${Date.now()}.html`);
     await fsp.writeFile(tmp, html);
     await w.loadURL(pathToFileURL(tmp).href);
     const out = await fn(w.webContents);

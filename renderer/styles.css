@@ -169,15 +169,28 @@ body.fullscreen .rz { display: none; }
 #main { flex: 1; display: flex; min-height: 0; }
 #canvas { flex: 1; overflow: auto; background: var(--canvas); position: relative; }
 #page-wrap { padding: 14px 20px 60px; width: max-content; min-width: 100%; display: flex; justify-content: center; }
-#page {
-  width: 816px; min-height: 1056px; zoom: var(--zoom);
+/* Separate 8.5 × 11 in pages, like Google Docs. The cards are drawn behind the text; the editor
+   pushes any line that would run into a page's bottom margin onto the next page (editor-src). */
+#sheet { position: relative; width: 816px; zoom: var(--zoom); }
+#pages { position: absolute; left: 0; right: 0; top: 0; display: flex; flex-direction: column; gap: 16px; pointer-events: none; }
+#pages > div { flex: none; height: 1056px; background: var(--page); box-shadow: var(--page-shadow); }
+#page { position: relative; }
+#page .ProseMirror {
+  min-height: 1056px;
   padding: var(--page-pad);
-  background: var(--page); color: var(--page-text);
-  box-shadow: var(--page-shadow);
+  background: transparent; color: var(--page-text);
   font-family: var(--doc-font), Arial, sans-serif; font-size: var(--doc-size); line-height: var(--doc-ls);
   outline: none; user-select: text; cursor: text; caret-color: var(--page-text);
   overflow-wrap: break-word; word-wrap: break-word;
 }
+#page .pb-push { border-top: var(--pb) solid transparent !important; }
+#page .pb-gap { display: block; pointer-events: none; user-select: none; }
+#page .page-break { height: 0; border-top: 1px dashed transparent; margin: 0 -8px; }
+#page .page-break.ProseMirror-selectednode { border-top-color: var(--accent); }
+#page img.ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 1px; }
+#page .ProseMirror-selectednode:not(img):not(.page-break) { outline: none; }
+#page .find-hit { background: #fde293; color: #000; }
+#page .find-current { background: #f8a646; }
 #statusbar { display: flex; align-items: center; gap: 12px; padding: 3px 14px; font-size: 11.5px; color: var(--muted); flex: none; border-top: 1px solid var(--border); }
 #statusbar .grow { flex: 1; }
 #word-count { cursor: pointer; }
@@ -197,12 +210,13 @@ body.fullscreen .rz { display: none; }
   body.page-dark .doc h4, body.page-dark .doc .subtitle, #imm .doc h4, #imm .doc .subtitle { color: inherit; opacity: .7; }
 }
 .doc ul, .doc ol { margin: 0; padding-left: 3.2em; }
-.doc li > p { display: inline; }
-.doc li > p + p { display: block; }
+.doc ol ol { list-style-type: lower-alpha; }
+.doc ol ol ol { list-style-type: lower-roman; }
+.doc .page-break { break-after: page; }
+#imm .doc .page-break { display: none; }
 .doc a { color: #1155cc; text-decoration: underline; }
 @media (prefers-color-scheme: dark) { body.page-dark .doc a, #imm .doc a { color: #8ab4f8; } }
 .doc img { max-width: 100%; height: auto; vertical-align: bottom; }
-.doc img.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .doc table { border-collapse: collapse; margin: 4pt 0; }
 .doc table.ln-table { width: 100%; table-layout: fixed; }
 .doc td, .doc th { border: 1px solid #9e9e9e; padding: 4px 6px; vertical-align: top; min-width: 24px; }
@@ -223,8 +237,6 @@ body.fullscreen .rz { display: none; }
   content: ""; position: absolute; left: -1.38em; top: .3em; width: .3em; height: .55em;
   border: solid #fff; border-width: 0 .14em .14em 0; transform: rotate(45deg);
 }
-::highlight(find) { background: #fde293; color: #000; }
-::highlight(find-current) { background: #f8a646; color: #000; }
 
 /* ============ sidebar ============ */
 #sidebar {
