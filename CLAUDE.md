@@ -41,6 +41,15 @@ electron-updater can't read a private repo without shipping a token in the app.
 - Copies updated from Lecture Notes keep using `%APPDATA%\Lecture Notes` for settings (main.js
   switches userData to it when it has a settings.json); new installs use `%APPDATA%\Interview Notes`.
 
+## Antivirus / SmartScreen
+
+The installer isn't code-signed, so SmartScreen shows "Unknown publisher" on download (Defender
+itself finds nothing). To give heuristic scanners less to flag, the build leaves out `elevate.exe`
+(`nsis.packElevateHelper: false`, unused by a per-user install) and ships only uiohook-napi's
+win32-x64 binary, not its C sources (keyboard-hook code) or other platforms' binaries (`build.files`
+exclusions). Keep it that way. Only a code-signing certificate (e.g. Azure Artifact Signing) removes
+the SmartScreen warning. `dist/` is disposable build output; every installer is on the GitHub releases.
+
 ## Shortcuts
 
 In-app shortcuts are the `APP_KEYS` table in app.js, dispatched by one capture-phase keydown

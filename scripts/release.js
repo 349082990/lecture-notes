@@ -56,7 +56,7 @@ async function draftRelease(tag) {
   const v = tag.slice(1);
   const body = `Interview Notes ${v}${process.env.RELEASE_NOTES ? '\n\n' + process.env.RELEASE_NOTES : ''}\n\n` +
     `**Download:** \`Interview-Notes-Setup-${v}.exe\` below (Windows 10 / 11). ` +
-    'Already installed? The app updates itself — just restart it.';
+    'Already installed? The app updates itself, just restart it.';
   return gh(api, { method: 'POST', body: JSON.stringify({ tag_name: tag, name: v, body, draft: true }) });
 }
 async function publishRelease(release) {

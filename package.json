@@ -1,7 +1,7 @@
 {
   "name": "interview-notes",
   "version": "2.0.10",
-  "description": "Interview Notes — a notes editor with an always-on-top reading overlay",
+  "description": "Interview Notes: a notes editor with an always-on-top reading overlay",
   "main": "main.js",
   "scripts": {
     "build:editor": "esbuild editor-src/index.js --bundle --format=iife --minify --target=chrome130 --legal-comments=none --outfile=renderer/editor.bundle.js",
@@ -49,7 +49,10 @@
       "build/icon.png",
       "build/tray.png",
       "build/tray@2x.png",
-      "package.json"
+      "package.json",
+      "!**/node_modules/uiohook-napi/{libuiohook,src}/**",
+      "!**/node_modules/uiohook-napi/prebuilds/{darwin-arm64,darwin-x64,linux-arm64,linux-loong64,linux-x64,win32-arm64}/**",
+      "!**/node_modules/**/*.{map,c,h,cc,gyp}"
     ],
     "directories": {
       "output": "dist"
@@ -74,7 +77,8 @@
       "shortcutName": "Interview Notes",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "artifactName": "Interview-Notes-Setup-${version}.${ext}"
+      "artifactName": "Interview-Notes-Setup-${version}.${ext}",
+      "packElevateHelper": false
     },
     "publish": [
       {
