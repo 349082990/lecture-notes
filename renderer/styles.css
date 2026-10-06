@@ -441,6 +441,15 @@ body.mode-immersive .rz[data-edge="e"], body.mode-immersive .rz[data-edge="w"] {
   box-shadow: 0 2px 10px rgba(0,0,0,.3); max-width: 80vw;
 }
 
+/* "Page 3 of 12" beside the editor's scrollbar while the mouse is on it */
+#sb-page {
+  position: fixed; z-index: 80; pointer-events: none; white-space: nowrap;
+  background: rgba(50,50,50,.88); color: #fff; padding: 3px 8px; border-radius: 5px;
+  font-size: 11.5px; font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px rgba(0,0,0,.2);
+  opacity: 0; transform: translate(4px, -50%); transition: opacity .12s, transform .12s;
+}
+#sb-page.show { opacity: 1; transform: translate(0, -50%); }
+
 ::-webkit-scrollbar { width: 12px; height: 12px; }
 ::-webkit-scrollbar-thumb { background: rgba(127,127,127,.35); border-radius: 6px; border: 3px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: rgba(127,127,127,.55); }

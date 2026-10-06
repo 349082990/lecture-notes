@@ -1460,14 +1460,73 @@
   }
   const updateWordCountSoon = debounce(updateWordCount, 400);
   // "Page 2 of 6": the page at the top part of the screen, like Google Docs
-  function updatePageCount() {
+  function pageAt(scrollTop) {
     const n = Math.max(1, $("#pages").children.length);
     const c = canvas.getBoundingClientRect(),
       s = $("#sheet").getBoundingClientRect();
-    const y = (c.top + Math.min(c.height / 3, 200) - s.top) / currentZoom();
-    const at = Math.max(1, Math.min(n, Math.floor(y / (PAGE_H + PAGE_GAP)) + 1));
-    $("#page-count").textContent = `Page ${at} of ${n}`;
+    const sheetTop = s.top - c.top + canvas.scrollTop;
+    const y = (scrollTop + Math.min(c.height / 3, 200) - sheetTop) / currentZoom();
+    return { at: Math.max(1, Math.min(n, Math.floor(y / (PAGE_H + PAGE_GAP)) + 1)), n };
   }
+  function updatePageCount() {
+    const { at, n } = pageAt(canvas.scrollTop);
+    $("#page-count").textContent = `Page ${at} of ${n}`;
+    if ($("#sb-page").classList.contains("show")) showScrollbarPage();
+  }
+
+  // Hovering the editor's scrollbar shows a small "Page 3 of 12" beside it: on the thumb (or
+  // while dragging it) the page you're on, elsewhere on the track the page that's there.
+  const sbPage = $("#sb-page");
+  let sbHoverY = null; // mouse position on the track, or null when on the thumb / dragging
+  let sbDragging = false;
+  function scrollbarAt(e) {
+    const c = canvas.getBoundingClientRect();
+    return (
+      canvas.scrollHeight > canvas.clientHeight &&
+      e.clientX >= c.left + canvas.clientLeft + canvas.clientWidth &&
+      e.clientX <= c.right &&
+      e.clientY >= c.top &&
+      e.clientY <= c.top + canvas.clientHeight
+    );
+  }
+  function scrollbarThumb() {
+    const track = canvas.clientHeight,
+      max = canvas.scrollHeight - track;
+    const h = Math.max(24, (track * track) / canvas.scrollHeight);
+    return { h, top: max > 0 ? ((track - h) * canvas.scrollTop) / max : 0, track, max };
+  }
+  function showScrollbarPage() {
+    const c = canvas.getBoundingClientRect(),
+      t = scrollbarThumb();
+    let top = canvas.scrollTop,
+      y = t.top + t.h / 2;
+    if (sbHoverY != null) {
+      const f = Math.max(0, Math.min(1, (sbHoverY - t.h / 2) / (t.track - t.h || 1)));
+      top = f * t.max;
+      y = sbHoverY;
+    }
+    const { at, n } = pageAt(top);
+    sbPage.textContent = `Page ${at} of ${n}`;
+    sbPage.style.top = c.top + Math.max(12, Math.min(t.track - 12, y)) + "px";
+    sbPage.style.right = innerWidth - (c.left + canvas.clientLeft + canvas.clientWidth) + 6 + "px";
+    sbPage.classList.add("show");
+  }
+  const hideScrollbarPage = () => sbPage.classList.remove("show");
+  document.addEventListener("mousemove", (e) => {
+    if (sbDragging && e.buttons) return showScrollbarPage();
+    sbDragging = false;
+    if (!scrollbarAt(e)) return hideScrollbarPage();
+    const t = scrollbarThumb(),
+      y = e.clientY - canvas.getBoundingClientRect().top;
+    sbHoverY = e.buttons || (y >= t.top && y <= t.top + t.h) ? null : y;
+    showScrollbarPage();
+  });
+  // A click or drag on the scrollbar follows the page you're on until the mouse moves again.
+  canvas.addEventListener("mousedown", (e) => {
+    if (scrollbarAt(e)) (sbHoverY = null), (sbDragging = true);
+  });
+  window.addEventListener("mouseup", () => (sbDragging = false));
+  document.documentElement.addEventListener("mouseleave", hideScrollbarPage);
   $("#word-count").onclick = showWordCount;
 
   /* ---------------- popovers ---------------- */

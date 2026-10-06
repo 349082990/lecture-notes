@@ -36,6 +36,9 @@
     "appId": "com.lecturenotes.app",
     "productName": "Interview Notes",
     "npmRebuild": false,
+    "electronLanguages": [
+      "en-US"
+    ],
     "asarUnpack": [
       "node_modules/uiohook-napi/**"
     ],

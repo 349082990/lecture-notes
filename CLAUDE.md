@@ -11,11 +11,13 @@ bundled by esbuild into `renderer/editor.bundle.js` — generated and git-ignore
 2. `npm run release` (or `npm run release minor`) — bumps the version, builds the NSIS installer,
    uploads it to the public `interview-notes` GitHub repo, then commits/tags/pushes the bump.
    `RELEASE_NOTES="..."` adds notes to the release page.
-3. Installed apps download it in the background (check at launch + every 4h) but only install after
+3. Installed apps check only when opened (launch or second-instance — no timer, no retries) and download
+   in the background (differential via the blockmap), but only install after
    asking: each time the app is opened (launch, or second-instance while it's in the tray) a dialog
    offers Update now / Not now. Mode switches don't count. Installing shows the "Updating Interview
    Notes" window, then the installer's progress bar (not silent). Copies before 2.0.3 still install
    on quit without asking.
+   `build.electronLanguages` is `en-US` only (saves ~40 MB of locale files per install).
 
 Source lives in the private `lecture-notes` repo; only installers (and `public-repo/README.md`,
 copied by hand) go to the public `interview-notes` repo, renamed from `lecture-notes-releases` —

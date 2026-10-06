@@ -498,11 +498,11 @@ function refreshTrayMenu() {
 
 /* ---------------- updates ---------------- */
 // Releases are published to GitHub (see "publish" in package.json and scripts/release.js).
-// The app checks at launch and every few hours and downloads new versions in the background, but
-// never installs one without asking: each time the app is opened (launched, or opened again from
-// the Start menu / desktop while it's running in the tray) and a newer version is there, a dialog
-// asks whether to update now. "Not now" leaves the current version in place until the next time.
-// Switching between the editor and the overlay doesn't count as opening the app.
+// The app only looks for a new version when it's opened (launched, or opened again from the Start
+// menu / desktop while it's running in the tray) — never on a timer, and switching between the
+// editor and the overlay doesn't count. A new version starts downloading in the background (only
+// the parts that changed, using the blockmap) and a dialog asks whether to update now. Nothing is
+// installed without a yes; "Not now" leaves the current version until the next time it's opened.
 let askOnOpen = true;          // the app was just opened: ask about an update this time
 let asking = false;
 let userWantsUpdate = false;   // said yes while the download was still going
@@ -520,8 +520,6 @@ function shortErr(e) {
   if (/ERR_INTERNET_DISCONNECTED|ENOTFOUND|ERR_NAME_NOT_RESOLVED|ETIMEDOUT|ECONNRESET|ERR_NETWORK/i.test(m)) return "you're offline or GitHub can't be reached";
   return m.split('\n')[0].slice(0, 140);
 }
-// A failed check tries again after 2 minutes (up to 5 times) instead of waiting for the 4-hour check.
-let retryTimer = null, retries = 0;
 function updateFailed(e) {
   if (userWantsUpdate) { // the download they asked for failed: bring the app back and say so
     userWantsUpdate = false;
@@ -531,9 +529,7 @@ function updateFailed(e) {
   }
   askOnOpen = false;
   if (updateStatus.state === 'ready') return;
-  const retrying = retries < 5;
-  sendUpdate({ state: 'error', message: shortErr(e) + (retrying ? ' — trying again in 2 minutes' : '') });
-  if (retrying && !retryTimer) retryTimer = setTimeout(() => { retryTimer = null; retries++; checkForUpdates(); }, 2 * 60 * 1000);
+  sendUpdate({ state: 'error', message: shortErr(e) });
 }
 // Dev-only: LN_TEST_FAKE_UPDATE=<version> pretends that version is on GitHub (with LN_TEST_HIDDEN).
 function fakeUpdater(version) {
@@ -566,7 +562,7 @@ function setupUpdater() {
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = false; // only ever installed after the user says yes
   updater.on('checking-for-update', () => sendUpdate({ state: 'checking' }));
-  updater.on('update-not-available', () => { retries = 0; askOnOpen = false; sendUpdate({ state: 'none' }); });
+  updater.on('update-not-available', () => { askOnOpen = false; sendUpdate({ state: 'none' }); });
   updater.on('update-available', (i) => {
     sendUpdate({ state: 'downloading', version: i.version, percent: 0 });
     askAboutUpdate(i);
@@ -581,8 +577,7 @@ function setupUpdater() {
     else askAboutUpdate(i);
   });
   updater.on('error', updateFailed);
-  setTimeout(checkForUpdates, 3000);
-  setInterval(checkForUpdates, 4 * 60 * 60 * 1000);
+  setTimeout(checkForUpdates, 1500); // launching counts as opening the app
 }
 async function checkForUpdates() {
   if (!updater) return updateStatus;
@@ -653,7 +648,7 @@ function installUpdate() {
   hideToast();
   if (win && !win.isDestroyed()) win.hide();
   testLog('installing ' + updateStatus.version);
-  setTimeout(() => updater.quitAndInstall(false, true), 2500); // installer with its progress bar, then reopen the app
+  setTimeout(() => updater.quitAndInstall(false, true), 900); // installer with its progress bar, then reopen the app
 }
 let updateWin = null;
 function showUpdateScreen(version) {
